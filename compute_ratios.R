@@ -31,7 +31,6 @@ RNAseqLowess <- function(LogIntensity, LogRatios){
 #' The output of the function is a dataframe with LogRatios to be used for the fitting of the model
 
 compute_ratios <- function(data, pseudo=1, lowess_norm=1){
-  .pkglobenv <- new.env(parent=emptyenv())
   message("You will be asked to enter column names for each condition.")
   message("If you have replicates, separate the column numbers with a comma. Example: 1,2")
 
@@ -45,13 +44,14 @@ compute_ratios <- function(data, pseudo=1, lowess_norm=1){
   .pkglobenv$col_condB <- as.numeric(unlist(strsplit(condB, ",")))
   .pkglobenv$col_condAB <- as.numeric(unlist(strsplit(condAB, ",")))
 
-  reps <- length(.pkglobenv$col_ctrl)
-  LogRatios <- matrix(nrow=length(DataPseudo[,1]), ncol=reps*5) #empty matrix
-  LogIntensity <- matrix(nrow=length(DataPseudo[,1]), ncol=reps*5) #empty matrix
-
   DataPseudo <- data + pseudo
   .pkglobenv$pseudo_count <- pseudo
   .pkglobenv$DataPseudo_obj <- DataPseudo
+  reps <- length(.pkglobenv$col_ctrl)
+
+  LogRatios <- matrix(nrow=length(DataPseudo[,1]), ncol=reps*5) #empty matrix
+  LogIntensity <- matrix(nrow=length(DataPseudo[,1]), ncol=reps*5) #empty matrix
+
   for (i in 1:reps){
     LogRatios[,1+ (5*(i-1))] <- log2(DataPseudo[, .pkglobenv$col_condA[i]] / DataPseudo[, .pkglobenv$col_ctrl[i]])
     LogRatios[,2+ (5*(i-1))] <- log2(DataPseudo[, .pkglobenv$col_condAB[i]] / DataPseudo[, .pkglobenv$col_condB[i]])

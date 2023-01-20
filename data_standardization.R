@@ -41,7 +41,7 @@ MedianNorm <- function(data, countthres=10, pseudo=1){
   T_med = apply(DataRatio,2, median) # median per column of array
   T_med = 2^T_med
 
-  C <- t(t(data) / T_med)
+  C <- t(t(Subdata) / T_med)
   return(C)
 }
 

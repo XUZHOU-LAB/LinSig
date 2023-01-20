@@ -59,7 +59,7 @@ ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
   #Fold <- data.frame(F_condA_ctrl, F_condAB_condB, F_condAB_condA, F_condB_ctrl)
 
   plot_variance <- plot(Expression_variation,Varexplain,
-                        main=paste("Variance Explained by fitting - pseudo:",pseudo),
+                        main=paste("Variance Explained by fitting - pseudo:", .pkglobenv$pseudo_count),
                         xlab="Variance of Measurement",
                         ylab="Variance explained")
 
