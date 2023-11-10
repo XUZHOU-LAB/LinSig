@@ -1,0 +1,13 @@
+name: DeconvoSig
+title: DeconvoSig
+username:
+account: 96well
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 7764328
+bundleId: 7912773
+url: https://96well.shinyapps.io/DeconvoSig/
+when: 1699651738.0243
+lastSyncTime: 1699651738.02431
+asMultiple: FALSE
+asStatic: FALSE
