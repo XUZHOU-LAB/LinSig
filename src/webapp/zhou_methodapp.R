@@ -374,6 +374,7 @@ server = function(input,output, session){
     FDRB <- modelStats[modelStats$SIGB,]
     FDRAB<- modelStats[modelStats$SIGAB,]
     
+    
     FDRab <- FDRb <- FDRa <- c()
     for (i in 1:length(seq(0,4,0.001))){
       FDRab[i] <- mean(abs(FDRAB$AB)>(seq(0,4,0.001)[i]))
@@ -386,6 +387,7 @@ server = function(input,output, session){
     }
     xs <- seq(0,4,0.001)
     FDRDF <- data.frame("Xs"=xs, "FDRa"=FDRa,"FDRb"=FDRb, "FDRab"=FDRab)
+    # replace which.min with NearestNeighbours function
     print(paste("5% FDR B_threshold A:", seq(0,4,0.001)[which.min(abs(FDRa-0.05))]))
     print(paste("5% FDR B_threshold B:", seq(0,4,0.001)[which.min(abs(FDRb-0.05))]))
     print(paste("5% FDR B_threshold AB:",seq(0,4,0.001)[which.min(abs(FDRab-0.05))]))
@@ -393,7 +395,7 @@ server = function(input,output, session){
     return(list(sampledMUCOV, FDRa, FDRb, FDRab))
   })
   
-  #returns df with LFC, COV and FDR values
+  #returns DF with LFC, COV and FDR values
   joinFDRandGenes <- reactive({
     #after deconvolute button
     decoDF <- deconvolute()
@@ -419,6 +421,7 @@ server = function(input,output, session){
     return(filteredDF)
   })
   
+  # VENN DIAGRAM
   output$venn <- renderPlot({
     df <- sigReal()
     # use data frame as input
@@ -433,7 +436,7 @@ server = function(input,output, session){
     ggvenn(M, fill_color=c("blue","red", "purple"), fill_alpha=0.25)
   })
   
-  
+  # Beta vs R2 Plot 
   output$betaR2 <- renderPlot({
     modelStats <- deconvolute()
     sigReal <- sigReal()
@@ -456,7 +459,7 @@ server = function(input,output, session){
     plot
   })
   
-  # RANDOM
+  # Mean ~ Variation Plot of Random Data
   output$betaR2_FDR <- renderPlot({
     mucovdf <- compFalseDisc()[[1]]
     plot(mucovdf$mu, mucovdf$cov, pch=".", asp=1,
@@ -464,6 +467,7 @@ server = function(input,output, session){
          main="Mean ~ Variation relation between sample replicates")
   }, width=400, height=400)
   
+  # FDR Cumulative Distribution Plot 
   output$FDRdistribution <- renderPlot({
     FDRb <- compFalseDisc()[[2]]
     FDRa <- compFalseDisc()[[3]]
@@ -485,7 +489,7 @@ server = function(input,output, session){
     paste("Number of genes after Count Threshold:", length(normRatios()[,1]))
   })
   
-  
+  # Volcano Plots
   output$volcanoPlot <- renderPlot({
     modelStats <- deconvolute()
     Pvals <- Pvalues_real()
@@ -503,24 +507,23 @@ server = function(input,output, session){
     
   })
   
+  # Click function for Volcano Plot
   clicked <- reactive({
     modelStats <- deconvolute()
     Pvals <- Pvalues_real()
-    
     ptype <- as.character(input$plottype)
-    
     df <- data.frame(cbind(modelStats[,2:4], Pvals[,2:4]))
-    
     ggdf <- data.frame(X=modelStats[,(as.integer(ptype)+1)], Y=Pvals[,(as.integer(ptype)+1)])
     ggdf <- cbind(ggdf, df)
     brushedPoints(ggdf, input$plot_brush)
   })
   
+  # Render table of selected genes in Volcano Plot
   output$clickedPoints <- renderTable({
     clicked()[,3:8]
   }, rownames=T, digits=4)
   
-  
+  # Render Table of all Genes
   output$stats <- renderDT({
     sigReal <- sigReal()
     boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
@@ -531,7 +534,8 @@ server = function(input,output, session){
     
   })
   
-  HDF <- reactive({ #heatmap df function
+  #Render Heatmap Function
+  HDF <- reactive({ 
     df <- deconvolute()
     p <- Pvalues_real()
     
