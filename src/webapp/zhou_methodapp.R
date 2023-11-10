@@ -548,36 +548,18 @@ server = function(input,output, session){
       df[,6:8] <- p[,2:4]
       sigs <- df[SIG_genes,]
       
-      print("dimensions heatmap genes df")
-      print(head(sigs))
-      
       sts <- sign(sigs[,2:4])*(sigs[,6:8]<0.05)
       sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
       clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation
       c_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
       
-      print("clus")
-      print(head(clus))
-      print(unlist(clus, use.names = FALSE) )
-      
-      clus_inc <- which(table(clus)>30)
+      clus_inc <- which(table(clus)>20) # parameter for minimum amount of genes in a cluster
       clus_inc <- names(clus_inc)
-      print("clus_inc")
-      print(clus_inc)
-      
-      print("table genes more than 30")
-      print(which(table(clus)>30))
       
       cc_order <- paste0("clus\n", c_order[c_order %in% clus_inc])
       
-      print("cc_order")
-      print(cc_order)
-      
       hmdf <- sigs[(clus %in% clus_inc), 2:4]
       
-      print(clus %in% clus_inc)
-      
-      print(hmdf[1:50,])
       
       clus.split <- factor(paste0("clus\n", clus[clus %in% clus_inc]),
                            levels=cc_order)
