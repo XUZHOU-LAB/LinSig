@@ -67,15 +67,15 @@ geomean <- function(x){
 
 MedianNorm <- function(Data, CountThres=10, pseudo=1){
 
-  Subdata = Data[rowMeans(Data)>=CountThres,]     # Subset rows with average count higher than 10
+  Subdata = Data[rowMeans(Data) >= CountThres,]     # Subset rows with average count higher than 10
   Subdata = Subdata + pseudo                       # Add Pseudo count of 1
 
-  t = apply(Subdata,1, geomean)         # Calculate Geometric mean
+  t = apply(Subdata, 1, geomean)         # Calculate Geometric mean
   # Divide expression of every element per row to the geometric mean of that row
   # Every 8 elements of Data need to be divided by an element of t
 
   DataRatio = log2(Subdata / t)
-  T_med = apply(DataRatio,2,median) # median per column of array
+  T_med = apply(DataRatio, 2 ,median) # median per column of array
   T_med = 2^T_med
   #print(T_med)
   C <- t(t(Subdata) / T_med)
@@ -85,10 +85,13 @@ MedianNorm <- function(Data, CountThres=10, pseudo=1){
 RNAseqLowess <- function(LogIntensity, LogRatios){
 
   Ynorm = loess(LogRatios~LogIntensity,
-                span=0.05,degree=1,family="gaussian",
-                iterations=1,surface="direct")
+                span = 0.05, 
+                degree = 1, 
+                family = "gaussian",
+                iterations = 1, 
+                surface = "direct")
+  
   Ratiosnorm = LogRatios - fitted(Ynorm)
-
   return(Ratiosnorm)
 }
 # Function for normalization with LOWESS
@@ -131,7 +134,7 @@ normalize <- function(inputdf, cntThres, pseudo, lowess=TRUE){
 
   withProgress(message="Computing Normalized Ratios", value=0,{
 
-    Ratios <- matrix(ncol=10, nrow=length(LogRatios[,1]))
+    Ratios <- matrix(ncol = 10, nrow=length(LogRatios[,1]))
     for (i in 1:NumRatios){
       Ratios[,i] <- RNAseqLowess(LogIntensity[,i], LogRatios[,i])
       incProgress(1/NumRatios)
@@ -144,11 +147,24 @@ normalize <- function(inputdf, cntThres, pseudo, lowess=TRUE){
 # Function for deconvoluting signals, used for Random data
 deconvolutef <- function(normRatios, firstFilter){
   Ratios <- normRatios[firstFilter,]
-  strucvec <- c(0,1,0,0,1,1,1,0,0,1,0,1,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,1,1)
-  strucmat <- matrix(strucvec, ncol=3, byrow=T)
+  strucvec <- c(0,1,0,
+                0,1,1,
+                1,0,0,
+                1,0,1,
+                1,1,1,
+                0,1,0,
+                0,1,1,
+                1,0,0,
+                1,0,1,
+                1,1,1)
+  strucmat <- matrix(strucvec, 
+                     ncol = 3, 
+                     byrow = T)
 
   A = length(Ratios[,1]) # of gene
-  B = matrix(0, nrow=A,ncol=4);
+  B = matrix(0, 
+             nrow = A,
+             ncol = 4);
 
   X <- strucmat
 
@@ -158,9 +174,12 @@ deconvolutef <- function(normRatios, firstFilter){
   rsquare <- vector()
   ngen <- length(Ratios[,1])
   covB_l <- NULL
-  covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen), cov_x2=double(ngen), cov_x3=double(ngen))
+  covB <- data.frame(cov_int=double(ngen), 
+                     cov_x1=double(ngen), 
+                     cov_x2=double(ngen), 
+                     cov_x3=double(ngen))
 
-  #add progress bar
+  #progress bar
   withProgress(message="Computing Model Statistics", value=0,{
 
     print(ngen)
@@ -168,7 +187,7 @@ deconvolutef <- function(normRatios, firstFilter){
       fit <- lm(Ratios[i,] ~ X)
       covB[i,] <- diag(vcov(fit))
       rsquare[i] <- summary(fit)$r.squared
-      incProgress(1/ngen)
+      incProgress(1 / ngen)
     }
   })
 
@@ -184,7 +203,7 @@ deconvolutef <- function(normRatios, firstFilter){
 Pval <- function(Betas, covB, Threshold){
   ttest_stat <- (abs(Betas) - log2(Threshold)) / sqrt(covB)
   ttest_stat <- data.frame(ttest_stat)
-  Pvalue = 1 -apply(ttest_stat, 2, pt, df=4)
+  Pvalue = 1 - apply(ttest_stat, 2, pt, df = 4)
   return(Pvalue)
 }
 
@@ -193,55 +212,84 @@ server = function(input,output, session){
   options(shiny.maxRequestSize=20*1024^2) #20MB max file size
   inputfile <- reactive({
     req(input$df)
-    df <- read.csv(input$df$datapath, header=T,row.names=1)
+    df <- read.csv(input$df$datapath, 
+                   header = T,
+                   row.names = 1)
     return(df)
   })
 
 
   normRatios <- eventReactive(input$normalise, {
-    return(normalize(inputfile(), cntThres=input$cntThres, pseudo=input$pseudo, lowess=input$lowess))
+    return(normalize(inputfile(), 
+                     cntThres = input$cntThres, 
+                     pseudo = input$pseudo, 
+                     lowess = input$lowess))
     })
+  
   # Function that filters based on q-value and Fold Change
   firstFilter <- eventReactive(input$deconvolute, {
     cntMat <- as.matrix(inputfile()[,1:8])
 
-    DataPseudo <- MedianNorm(cntMat, CountThres=input$cntThres, pseudo=input$pseudo)
-    F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4])/(DataPseudo[,1]+ DataPseudo[,2]))
-    F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8])/(DataPseudo[,5]+ DataPseudo[,6]))
-    F_ABvsA = log2((DataPseudo[,7] + DataPseudo[,8])/(DataPseudo[,3]+ DataPseudo[,4]))
-    F_BvsC = log2((DataPseudo[,5] + DataPseudo[,6])/(DataPseudo[,1]+ DataPseudo[,2]))
+    DataPseudo <- MedianNorm(cntMat, 
+                             CountThres = input$cntThres, 
+                             pseudo = input$pseudo)
+    
+    F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4]) / (DataPseudo[,1]+ DataPseudo[,2]))
+    F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,5]+ DataPseudo[,6]))
+    F_ABvsA = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,3]+ DataPseudo[,4]))
+    F_BvsC = log2((DataPseudo[,5] + DataPseudo[,6]) / (DataPseudo[,1]+ DataPseudo[,2]))
 
-    Fold <- data.frame(F_AvsC, F_ABvsB, F_ABvsA, F_BvsC)
+    Fold <- data.frame(F_AvsC, 
+                       F_ABvsB, 
+                       F_ABvsA, 
+                       F_BvsC)
 
-    qvals <- inputfile()[,9:12]
+    qvals <- inputfile()[,9:12] # q_values in CSV
     countthresholdFilter <- rownames(DataPseudo)
-    qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,]
+    qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,] 
 
     SigIDX = rowSums(abs(Fold[,1:4]) >= input$lfcThres & qvalDF <= 0.05)>0
-
-    return(SigIDX)
+    
+    return(SigIDX) # returns indexes deemed significant
   })
   #deconvolute for real data
   deconvolute <- eventReactive(input$deconvolute, {
     Ratios <- normRatios()[firstFilter(),]
-    strucvec <- c(0,1,0,0,1,1,1,0,0,1,0,1,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,1,1)
+    strucvec <- c(0,1,0,
+                  0,1,1,
+                  1,0,0,
+                  1,0,1,
+                  1,1,1,
+                  0,1,0,
+                  0,1,1,
+                  1,0,0,
+                  1,0,1,
+                  1,1,1)
     strucmat <- matrix(strucvec, ncol=3, byrow=T)
 
     A = length(Ratios[,1]) # of gene
-    B = matrix(0, nrow=A,ncol=4);
+    B = matrix(0, 
+               nrow = A,
+               ncol = 4);
 
     X <- strucmat
     cc <- strsplit(colnames(inputfile())[1:8], "_")
-    cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1]
-    colnames(X) <- c(cols[2], cols[1], cols[3])
+    cols <- unique(unlist(cc)[2 * (1:length(cc)) - 1])[-1]
+    
+    colnames(X) <- c(cols[2], 
+                     cols[1], 
+                     cols[3])
 
 
     rsquare <- vector()
     ngen <- length(Ratios[,1])
     covB_l <- NULL
-    covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen), cov_x2=double(ngen), cov_x3=double(ngen))
+    covB <- data.frame(cov_int=double(ngen), 
+                       cov_x1=double(ngen), 
+                       cov_x2=double(ngen), 
+                       cov_x3=double(ngen))
 
-    #adds progress bar
+    #progress bar
     withProgress(message="Computing Model Statistics", value=0,{
 
       print(ngen)
@@ -278,16 +326,22 @@ server = function(input,output, session){
     req(input$rdf)
     rdf <- read.csv(input$rdf$datapath, row.names=1, header=T)
 
-    normRatios <- normalize(rdf, cntThres=input$cntThres, pseudo=input$pseudo, lowess=input$lowess)
+    normRatios <- normalize(rdf, 
+                            cntThres=input$cntThres, 
+                            pseudo=input$pseudo, 
+                            lowess=input$lowess)
 
     cntMat <- as.matrix(rdf[,1:8])
     DataPseudo <- MedianNorm(cntMat, CountThres=input$cntThres, pseudo=input$pseudo)
-    F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4])/(DataPseudo[,1]+ DataPseudo[,2]))
-    F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8])/(DataPseudo[,5]+ DataPseudo[,6]))
-    F_ABvsA = log2((DataPseudo[,7] + DataPseudo[,8])/(DataPseudo[,3]+ DataPseudo[,4]))
-    F_BvsC = log2((DataPseudo[,5] + DataPseudo[,6])/(DataPseudo[,1]+ DataPseudo[,2]))
+    F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4]) / (DataPseudo[,1]+ DataPseudo[,2]))
+    F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,5]+ DataPseudo[,6]))
+    F_ABvsA = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,3]+ DataPseudo[,4]))
+    F_BvsC = log2((DataPseudo[,5] + DataPseudo[,6]) / (DataPseudo[,1]+ DataPseudo[,2]))
 
-    Fold <- data.frame(F_AvsC, F_ABvsB, F_ABvsA, F_BvsC)
+    Fold <- data.frame(F_AvsC, 
+                       F_ABvsB, 
+                       F_ABvsA, 
+                       F_BvsC)
 
     lfct <- input$lfcThres
     SigIDX = rowSums(abs(Fold[,1:4]) >= lfct)>0
@@ -309,7 +363,7 @@ server = function(input,output, session){
   Pvalues_real <- reactive({
     real_stats <- deconvolute()
     p <- Pval(real_stats[,1:4], real_stats[,5:8], input$H0Thres)
-    print(paste("real", sum(rowSums(p<=0.05)>0)))
+    print(paste("real", sum(rowSums(p <= 0.05) > 0)))
     print(sum(rowSums(p>0.5)>0))
     colnames(p) <- paste0("p_", colnames(p))
     print(paste("Pvalues colnames:",colnames(p)))
@@ -397,15 +451,18 @@ server = function(input,output, session){
     rstats <- FDR()
     A_r <- ggplot(rstats, aes(A, R2)) +
       geom_point(size=0.5) +
-      geom_point(data=rstats[sigRand()[[1]],], color="red", size=0.7) +
+      geom_point(data=rstats[sigRand()[[1]],], 
+                 color="red", size=0.7) +
       coord_cartesian(xlim =c(-4, 4))
     B_r <- ggplot(rstats, aes(B, R2)) +
       geom_point(size=0.5) +
-      geom_point(data=rstats[sigRand()[[2]],], color="red", size=0.7) +
+      geom_point(data=rstats[sigRand()[[2]],], 
+                 color="red", size=0.7) +
       coord_cartesian(xlim =c(-4, 4))
     AB_r <- ggplot(rstats, aes(AB, R2)) +
       geom_point(size=0.5) +
-      geom_point(data=rstats[sigRand()[[3]],], color="red", size=0.7) +
+      geom_point(data=rstats[sigRand()[[3]],], 
+                 color="red", size=0.7) +
       coord_cartesian(xlim =c(-4, 4))
 
 
@@ -423,9 +480,9 @@ server = function(input,output, session){
   })
 
   output$cFDR <- renderPrint({
-    cat(paste( paste("FDR: ", "A:", sum(sigRand()[[1]])/length(sigRand()[[1]])),
-    paste("FDR: ", "B:", sum(sigRand()[[2]])/length(sigRand()[[2]])),
-    paste("FDR: ","AB:", sum(sigRand()[[3]])/length(sigRand()[[3]])), sep="\n"))
+    cat(paste( paste("FDR: ", "A:", sum(sigRand()[[1]]) / length(sigRand()[[1]])),
+    paste("FDR: ", "B:", sum(sigRand()[[2]]) / length(sigRand()[[2]])),
+    paste("FDR: ","AB:", sum(sigRand()[[3]]) / length(sigRand()[[3]])), sep="\n"))
   })
 
 
@@ -465,12 +522,12 @@ server = function(input,output, session){
 
   output$stats <- renderDT({
     sigReal <- sigReal()
-    boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
+    boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]]) # at least significant regulation by one term
 
     df <- deconvolute()
-    df[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
+    df[, c(6,7,8)] <- Pvalues_real()[, c(2,3,4)]
     colnames(df)[6:8] <- colnames(Pvalues_real())[2:4]
-    round(df[boolfilt,c(2,3,4,6,7,8,9)], digits=6)
+    round(df[boolfilt, c(2,3,4,6,7,8,9)], digits=6)
   })
 
   HDF <- reactive({ #heatmap df function
@@ -479,33 +536,37 @@ server = function(input,output, session){
 
     assign_genes <- function(df, B_thr=1, R_thr=0.8){
       print(colnames(df))
+      
       SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
                       (abs(df[,3]) > B_thr & p[,3] < 0.05) |
                       (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2>R_thr
       print(paste("Significant Genes: ", sum(SIG_genes)))
+      
       df[,6:8] <- p[,2:4]
       sigs <- df[SIG_genes,]
       sts <- sign(sigs[,2:4])*(sigs[,6:8]<0.05)
       sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
       clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation
+      
       c_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
+      # c_order shows order such that genes regulated by one signal are showed first, 
+      # more complicated regulated genes shown lower in the heatmap
 
-      clus_inc <- which(table(clus)>30)
+      clus_inc <- which(table(clus) > 30)
       cc_order <- paste0("clus\n", c_order[c_order %in% clus_inc])
       hmdf <- sigs[(clus %in% clus_inc), 2:4]
       clus.split <- factor(paste0("clus\n", clus[clus %in% clus_inc]),
                            levels=cc_order)
-      col_fun = colorRamp2(c(-2,0, 2), c("blue","white", "red"))
+      col_fun = colorRamp2(c(-2, 0, 2), c("blue","white", "red"))
 
-      heatmap_obj <- Heatmap(as.matrix(hmdf), split=clus.split, col=col_fun, cluster_row_slices = F, cluster_columns = F)
-
-
+      heatmap_obj <- Heatmap(as.matrix(hmdf), 
+                             split=clus.split, 
+                             col=col_fun, 
+                             cluster_row_slices = F, 
+                             cluster_columns = F)
       return(heatmap_obj)
-
     }
-
     return(assign_genes(df, R_thr=input$R2Thres))
-
   })
 
   outputDF <- reactive({
@@ -523,16 +584,17 @@ server = function(input,output, session){
       boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
 
       df <- deconvolute()
-      df[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
+      df[, c(6,7,8)] <- Pvalues_real()[, c(2,3,4)]
       colnames(df)[6:8] <- colnames(Pvalues_real())[2:4]
-      outcsv <- df[boolfilt,c(2,3,4,6,7,8,9)]
+      outcsv <- df[boolfilt, c(2,3,4,6,7,8,9)]
 
       write.csv(outcsv, file, row.names = T)
     }
   )
 
   output$coln <- renderText({outputDF()})
-
+  
+  # which of these observeEvent calls are necessary?
   observeEvent(input$norm, {print("apply norm")})
   observeEvent(input$deconvolute, {print("Deconvolute")})
   #observeEvent(input$lfcThres)
