@@ -16,6 +16,10 @@ library(ggvenn)
 #clearer, more concise UI
 # colnames error message
 
+###################################################
+########## U S E R   I N T E R F A C E ############
+###################################################
+
 ui = fluidPage(
   sidebarPanel(
     fileInput("df", "Upload Counts, q-values",
@@ -78,7 +82,9 @@ ui = fluidPage(
   )
 )
 
-################################################################################
+###################################
+######## F U N C T I O N S ########
+###################################
 
 geomean <- function(x){
   exp(mean(log(x)))
@@ -163,10 +169,19 @@ normalize <- function(inputdf, cntThres, pseudo, lowess=TRUE){
   
 }
 
-deconvolutef <- function(ratiosDF, countDF){
+deconvoluteFunction <- function(ratiosDF, countDF){
   #Ratios <- normRatios()[firstFilter(),]
   Ratios <- ratiosDF
-  strucvec <- c(0,1,0,0,1,1,1,0,0,1,0,1,1,1,1,0,1,0,0,1,1,1,0,0,1,0,1,1,1,1)
+  strucvec <- c(0,1,0,
+                0,1,1,
+                1,0,0,
+                1,0,1,
+                1,1,1,
+                0,1,0,
+                0,1,1,
+                1,0,0,
+                1,0,1,
+                1,1,1)
   strucmat <- matrix(strucvec, ncol=3, byrow=T)
   X <- strucmat
   
@@ -222,14 +237,18 @@ NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
   return(y[loc])
 }
 
-################################################################################
+##############################################################
+####################### S E R V E R ##########################
+##############################################################
 
 server = function(input,output, session){
   
   options(shiny.maxRequestSize=20*1024^2) #20MB max file size
   inputfile <- reactive({
     req(input$df)
-    df <- read.csv(input$df$datapath, header=T,row.names=1)
+    df <- read.csv(input$df$datapath,
+                   header = T,
+                   row.names = 1)
     return(df)
   })
   
@@ -260,7 +279,7 @@ server = function(input,output, session){
   })
   
   deconvolute <- eventReactive(input$deconvolute, {
-    deconvolutef(normRatios()[firstFilter(),], inputfile())
+    deconvoluteFunction(normRatios()[firstFilter(),], inputfile())
   })
   
   #returns Pvalues based on LFC and COVs
@@ -308,9 +327,9 @@ server = function(input,output, session){
     sd_per_condition[,4] <- sqrt(rowSums((rowMeans(normedCounts[,c(7,8)]) - normedCounts[,c(7,8)])**2))
     
     mucov<-data.frame(mu=array(mean_per_condition), cov=array(sd_per_condition/mean_per_condition))
-    lmucov <- log(mucov)
-    olmucov <- lmucov[order(lmucov$mu),]
-    binmucov <- olmucov %>% mutate(mu_bin = cut(mu, breaks=20))
+    logMuCov <- log(mucov)
+    orderedLogMuCov <- logMuCov[order(logMuCov$mu),]
+    binmucov <- orderedLogMuCov %>% mutate(mu_bin = cut(mu, breaks=20))
     covsList <- c()
     sizeRDF <- input$RDFsize
     #sample cov between each bin
@@ -324,9 +343,9 @@ server = function(input,output, session){
     
     #compute distribution of gene means
     mustat <-MASS::fitdistr(rowMeans(normedCounts), "lognormal")
-    new_row_means <- rlnorm(sizeRDF, mustat[[1]][1], mustat[[1]][2])
-    onrm <- new_row_means[order(new_row_means)]
-    sampledMUCOV <- data.frame(cbind(log(onrm), covsList))
+    newRowMeans <- rlnorm(sizeRDF, mustat[[1]][1], mustat[[1]][2])
+    orderedNewRowMeans <- newRowMeans[order(newRowMeans)]
+    sampledMUCOV <- data.frame(cbind(log(orderedNewRowMeans), covsList))
     colnames(sampledMUCOV) <- c("mu", "cov")
     #generate new counts
     drawreps <- function(mucovr, rep=4*2){
@@ -338,18 +357,22 @@ server = function(input,output, session){
     RandomDF <- data.frame(RandomDF)
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
     
-    normalizedRandomDF <- normalize(RandomDF, cntThres=input$cntThres, pseudo=input$pseudo, lowess=input$lowess)
-    mstats <- deconvolutef(normalizedRandomDF, RandomDF)
+    normalizedRandomDF <- normalize(RandomDF, 
+                                    cntThres = input$cntThres, 
+                                    pseudo = input$pseudo, 
+                                    lowess = input$lowess)
     
-    mstats[,5:8] <- calcPvalue(mstats[,1:4], mstats[5:8], 1)
-    colnames(mstats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
+    modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF)
     
-    mstats$SIGB <- mstats[,6]<0.05 & mstats$R2>0.8 # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
-    mstats$SIGA <- mstats[,7]<0.05 & mstats$R2>0.8
-    mstats$SIGAB <-mstats[,8]<0.05 & mstats$R2>0.8
-    FDRA <- mstats[mstats$SIGA,]
-    FDRB <- mstats[mstats$SIGB,]
-    FDRAB<- mstats[mstats$SIGAB,]
+    modelStats[,5:8] <- calcPvalue(modelStats[,1:4], modelStats[5:8], 1)
+    colnames(modelStats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
+    
+    modelStats$SIGB <- modelStats[,6] < 0.05 & modelStats$R2 > 0.8 # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
+    modelStats$SIGA <- modelStats[,7] < 0.05 & modelStats$R2 > 0.8
+    modelStats$SIGAB <-modelStats[,8] < 0.05 & modelStats$R2 > 0.8
+    FDRA <- modelStats[modelStats$SIGA,]
+    FDRB <- modelStats[modelStats$SIGB,]
+    FDRAB<- modelStats[modelStats$SIGAB,]
     
     FDRab <- FDRb <- FDRa <- c()
     for (i in 1:length(seq(0,4,0.001))){
@@ -399,8 +422,8 @@ server = function(input,output, session){
   output$venn <- renderPlot({
     df <- sigReal()
     # use data frame as input
-    mstats <- deconvolute()
-    cols <- colnames(mstats)[2:4]
+    modelStats <- deconvolute()
+    cols <- colnames(modelStats)[2:4]
     
     M <-tibble(value=1:length(df[[1]]), 'A'= df[[1]],
                'B'= df[[2]],
@@ -412,10 +435,10 @@ server = function(input,output, session){
   
   
   output$betaR2 <- renderPlot({
-    mstats <- deconvolute()
+    modelStats <- deconvolute()
     sigReal <- sigReal()
-    cols <- colnames(mstats)[2:4]
-    R2 <- mstats$R2
+    cols <- colnames(modelStats)[2:4]
+    R2 <- modelStats$R2
     
     plotFun <- function(dat, x, y, sigs){
       ggplot(dat, aes(x=.data[[x]], y=.data[[y]])) +
@@ -424,9 +447,9 @@ server = function(input,output, session){
         coord_cartesian(xlim=c(-5,5))
     }
     
-    A <- plotFun(dat=mstats, x=cols[1], y="R2", sigs=sigReal[[1]])
-    B <- plotFun(dat=mstats, x=cols[2], y="R2", sigs=sigReal[[2]])
-    AB <-plotFun(dat=mstats, x=cols[3], y="R2", sigs=sigReal[[3]])
+    A <- plotFun(dat=modelStats, x=cols[1], y="R2", sigs=sigReal[[1]])
+    B <- plotFun(dat=modelStats, x=cols[2], y="R2", sigs=sigReal[[2]])
+    AB <-plotFun(dat=modelStats, x=cols[3], y="R2", sigs=sigReal[[3]])
     
     plot <- ggarrange(A, B, AB, ncol=3)
     annotate_figure(plot, top=text_grob("Betas after LFC>X and qval<0.05 Selection"))
@@ -464,31 +487,31 @@ server = function(input,output, session){
   
   
   output$volcanoPlot <- renderPlot({
-    mstats <- deconvolute()
+    modelStats <- deconvolute()
     Pvals <- Pvalues_real()
     ptype <- as.character(input$plottype)
     
-    X=mstats[,(as.integer(ptype)+1)]
+    X=modelStats[,(as.integer(ptype)+1)]
     Y=Pvals[,(as.integer(ptype)+1)]
     
     ggplot()+
       geom_point(aes(x=X, y=Y))+
       scale_y_continuous(trans="log10")+
-      xlab(colnames(mstats[as.integer(ptype)+1])) + ylab("log P-value")+
-      ggtitle(paste0("Volcano Plot of ", colnames(mstats[as.integer(ptype)+1])), " Induced Genes")+
+      xlab(colnames(modelStats[as.integer(ptype)+1])) + ylab("log P-value")+
+      ggtitle(paste0("Volcano Plot of ", colnames(modelStats[as.integer(ptype)+1])), " Induced Genes")+
       theme(plot.title = element_text(size = 20, face = "bold"))
     
   })
   
   clicked <- reactive({
-    mstats <- deconvolute()
+    modelStats <- deconvolute()
     Pvals <- Pvalues_real()
     
     ptype <- as.character(input$plottype)
     
-    df <- data.frame(cbind(mstats[,2:4], Pvals[,2:4]))
+    df <- data.frame(cbind(modelStats[,2:4], Pvals[,2:4]))
     
-    ggdf <- data.frame(X=mstats[,(as.integer(ptype)+1)], Y=Pvals[,(as.integer(ptype)+1)])
+    ggdf <- data.frame(X=modelStats[,(as.integer(ptype)+1)], Y=Pvals[,(as.integer(ptype)+1)])
     ggdf <- cbind(ggdf, df)
     brushedPoints(ggdf, input$plot_brush)
   })
@@ -532,14 +555,13 @@ server = function(input,output, session){
                            levels=cc_order)
       col_fun = colorRamp2(c(-2,0, 2), c("blue","white", "red"))
       
-      heatmap_obj <- Heatmap(as.matrix(hmdf), split=clus.split, col=col_fun,
-                             cluster_row_slices = F, cluster_columns = F)
-      
-      
+      heatmap_obj <- Heatmap(as.matrix(hmdf), 
+                             split = clus.split, 
+                             col = col_fun,
+                             cluster_row_slices = F,
+                             cluster_columns = F)
       return(heatmap_obj)
-      
     }
-    
     return(assign_genes(df, R_thr=input$R2Thres))
     
   })
