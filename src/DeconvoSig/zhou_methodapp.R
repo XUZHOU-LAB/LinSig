@@ -416,7 +416,7 @@ server = function(input,output, session){
     decoDF[,11] <- FDR_B
     decoDF[,12] <- FDR_AB
     colnames(decoDF)[10:12] <- paste0("FDR_", colnames(decoDF[,2:4]))
-    filteredDF <- round(decoDF[boolfilt,c(2,3,4,6,7,8,9,10,11,12)], digits=6)
+    filteredDF <- round(decoDF[boolfilt,c(1,2,3,4,6,7,8,9,10,11,12)], digits=6)
     
     return(filteredDF)
   })
@@ -530,7 +530,7 @@ server = function(input,output, session){
     df <- deconvolute()
     df[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
     colnames(df)[6:8] <- colnames(Pvalues_real())[2:4]
-    round(df[boolfilt,c(2,3,4,6,7,8,9)], digits=6)
+    round(df[boolfilt,c(1,2,3,4,6,7,8,9)], digits=6)
     
   })
   
