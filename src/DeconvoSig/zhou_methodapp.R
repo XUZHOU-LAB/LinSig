@@ -12,7 +12,7 @@ library(ggvenn)
 
 #TODO
 #optional qvalues
-#multiple replicates
+#multiple replicates - right now only 2...
 #clearer, more concise UI
 # colnames error message
 
@@ -41,12 +41,12 @@ ui = fluidPage(
     hr(),
     sliderInput("lfcThres", "LFC Threshold (LFC>X & qval<0.05)",
                 value=0.585, min=0, max=3, step=0.001),
-    actionButton("deconvolute", "Deconvolute Signals"),
-    hr(),
     sliderInput("H0Thres", "Null-Hypothesis Test FC Threshold",
                 value=1.5, min=1, max=4, step=0.01),
     sliderInput("R2Thres", "R2 Threshold",
                 value=0.8, min=0.1, max=1, step=0.01),
+    actionButton("deconvolute", "Deconvolute Signals"),
+    hr(),
     actionButton("compFDR", "Compute False Discovery Rate"),
     numericInput("RDFsize", "Random Dataset Size",
                  value=40000, min=10000, step=1),
@@ -63,10 +63,10 @@ ui = fluidPage(
                 tabPanel("R2~Beta Plots", plotOutput("betaR2")),
                 tabPanel("FDR",
                          fluidRow(
-                           splitLayout(cellWidths = c("50%", "50%"), plotOutput("betaR2_FDR"), plotOutput("FDRdistribution"))
+                           splitLayout(cellWidths = c("50%", "50%"), 
+                                       plotOutput("betaR2_FDR"), 
+                                       plotOutput("FDRdistribution"))
                          ),
-                         #plotOutput("betaR2_FDR"),
-                         #plotOutput("FDRdistribution"),
                          verbatimTextOutput("cFDR"),
                          verbatimTextOutput("pval")),
                 tabPanel("Volcano Plots",
@@ -77,7 +77,13 @@ ui = fluidPage(
                          tableOutput('clickedPoints')),
                 tabPanel("Heatmap",
                          actionButton("show_heatmap", "Generate Heatmap"),
-                         htmlOutput("heatmap_output"))
+                         htmlOutput("heatmap_output")),
+                tabPanel("Enrichment Analysis",
+                         dataTableOutput("clusters"),
+                         numericInput("minimumGenesinClus", "Minimum Genes in a Cluster",
+                                      value=20, min=1, max=1000, step=1),
+                         selectInput("chooseCluster", "clusterChoice", choices = NA)
+                        )
     )
   )
 )
@@ -92,17 +98,16 @@ geomean <- function(x){
 
 MedianNorm <- function(Data, CountThres=10, pseudo=1){
   
-  Subdata = Data[rowMeans(Data)>=CountThres,]     # Subset rows with average count higher than 10
+  Subdata = Data[rowMeans(Data) >= CountThres,]     # Subset rows with average count higher than 10
   Subdata = Subdata + pseudo                       # Add Pseudo count of 1
   
-  t = apply(Subdata,1, geomean)         # Calculate Geometric mean
+  t = apply(Subdata, 1, geomean)         # Calculate Geometric mean
   # Divide expression of every element per row to the geometric mean of that row
   # Every 8 elements of Data need to be divided by an element of t
   
   DataRatio = log2(Subdata / t)
-  T_med = apply(DataRatio,2,median) # median per column of array
+  T_med = apply(DataRatio, 2, median) # median per column of array
   T_med = 2^T_med
-  #print(T_med)
   C <- t(t(Subdata) / T_med)
   return(C)
 }
@@ -170,7 +175,6 @@ normalize <- function(inputdf, cntThres, pseudo, lowess=TRUE){
 }
 
 deconvoluteFunction <- function(ratiosDF, countDF){
-  #Ratios <- normRatios()[firstFilter(),]
   Ratios <- ratiosDF
   strucvec <- c(0,1,0,
                 0,1,1,
@@ -185,7 +189,7 @@ deconvoluteFunction <- function(ratiosDF, countDF){
   strucmat <- matrix(strucvec, ncol=3, byrow=T)
   X <- strucmat
   
-  A = length(Ratios[,1]) # of gene
+  A = length(Ratios[,1]) #number of genes
   B = matrix(0, nrow=A,ncol=4);
   
   #get column data
@@ -193,11 +197,11 @@ deconvoluteFunction <- function(ratiosDF, countDF){
   cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1]
   colnames(X) <- c(cols[2], cols[1], cols[3])
   
-  
   rsquare <- vector()
   ngen <- length(Ratios[,1])
   covB_l <- NULL
-  covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen), cov_x2=double(ngen), cov_x3=double(ngen))
+  covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen), 
+                     cov_x2=double(ngen), cov_x3=double(ngen))
   
   #adds progress bar
   withProgress(message="Computing Model Statistics", value=0,{
@@ -269,6 +273,8 @@ server = function(input,output, session){
     
     Fold <- data.frame(F_AvsC, F_ABvsB, F_ABvsA, F_BvsC)
     
+    #TODO: implement function: if q-values empty, set all to zero
+    
     qvals <- inputfile()[,9:12]
     countthresholdFilter <- rownames(DataPseudo)
     qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,]
@@ -286,8 +292,8 @@ server = function(input,output, session){
   Pvalues_real <- reactive({
     real_stats <- deconvolute()
     p <- calcPvalue(real_stats[,1:4], real_stats[,5:8], input$H0Thres)
-    print(paste("real", sum(rowSums(p<=0.05)>0)))
-    print(sum(rowSums(p>0.5)>0))
+    print(paste("real", sum(rowSums(p <= 0.05) > 0)))
+    print(sum(rowSums(p > 0.5) > 0))
     colnames(p) <- paste0("p_", colnames(p))
     return(p)
     
@@ -298,9 +304,9 @@ server = function(input,output, session){
     real_stats <- deconvolute()
     r2 <- real_stats$R2
     FCFDR <- log2(input$FCFDR)
-    A <- (abs(real_stats[,2])>FCFDR & r2>input$R2Thres & Pvalues[,2]<0.05)
-    B <- (abs(real_stats[,3])>FCFDR & r2>input$R2Thres & Pvalues[,3]<0.05)
-    AB <- (abs(real_stats[,4])>FCFDR & r2>input$R2Thres & Pvalues[,4]<0.05)
+    A <- (abs(real_stats[,2]) > FCFDR & r2 > input$R2Thres & Pvalues[,2] < 0.05)
+    B <- (abs(real_stats[,3]) > FCFDR & r2 > input$R2Thres & Pvalues[,3] < 0.05)
+    AB <- (abs(real_stats[,4]) > FCFDR & r2 > input$R2Thres & Pvalues[,4]< 0.05)
     print(paste("real A|B|AB:", sum(A|B|AB)))
     print(paste("A B AB", sum(A), sum(B), sum(AB)))
     
@@ -481,8 +487,6 @@ server = function(input,output, session){
     lines(seq(0,4,0.001), FDRa, log='x', type='l', col='blue',lwd=1.5)
     abline(h=0.05, col="red", lwd=2)
     
-    #print(head(joinFDRandGenes()))
-    
   },width=400, height=400)
   
   output$files <- renderText({
@@ -534,6 +538,46 @@ server = function(input,output, session){
     
   })
   
+  output$clusters <- renderDT({
+    clusterDT <- generateClusters()
+    round(clusterDT, digit=4)
+  })
+  
+  generateClusters <- reactive({
+    df <- deconvolute()
+    p <- Pvalues_real()
+    
+    B_thr = 1
+    R_thr = input$R2Thres
+    minGenesInCluster = input$minimumGenesinClus
+
+    SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
+                  (abs(df[,3]) > B_thr & p[,3] < 0.05) |
+                  (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2>R_thr
+    print(paste("Significant Genes: ", sum(SIG_genes)))
+    df[,6:8] <- p[,2:4]
+    sigs <- df[SIG_genes,]
+      
+    sts <- sign(sigs[,2:4])*(sigs[,6:8]<0.05)
+    sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
+    clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation 1:LPS, 3:pH, 9:pHLPS
+    cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
+    
+    clustersToInclude <- which(table(clus)>minGenesInCluster) # parameter for minimum amount of genes in a cluster
+    clustersToInclude <- names(clustersToInclude)
+    cc_order <- paste0("clus\n", cluster_order[cluster_order %in% clustersToInclude])
+      
+    clusterDF <- sigs[(clus %in% clustersToInclude), 2:4]
+    geneClusters <- clus[clus %in% clustersToInclude]
+    clusterDF$cluster <- geneClusters
+    return(clusterDF)
+  })
+  
+  observeEvent(generateClusters(), {
+    choices <- unique(generateClusters()$cluster)
+    updateSelectInput(inputId = "chooseCluster", choices = choices) 
+  })
+  
   #Render Heatmap Function
   HDF <- reactive({ 
     df <- deconvolute()
@@ -542,8 +586,8 @@ server = function(input,output, session){
     assign_genes <- function(df, B_thr=1, R_thr=0.8){
       print(colnames(df))
       SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
-                      (abs(df[,3]) > B_thr & p[,3] < 0.05) |
-                      (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2>R_thr
+                    (abs(df[,3]) > B_thr & p[,3] < 0.05) |
+                    (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2>R_thr
       print(paste("Significant Genes: ", sum(SIG_genes)))
       df[,6:8] <- p[,2:4]
       sigs <- df[SIG_genes,]
@@ -553,15 +597,14 @@ server = function(input,output, session){
       clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation
       c_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
       
-      clus_inc <- which(table(clus)>20) # parameter for minimum amount of genes in a cluster
-      clus_inc <- names(clus_inc)
+      clustersToInclude <- which(table(clus)>20) # parameter for minimum amount of genes in a cluster
+      clustersToInclude <- names(clustersToInclude)
       
-      cc_order <- paste0("clus\n", c_order[c_order %in% clus_inc])
+      cc_order <- paste0("clus\n", c_order[c_order %in% clustersToInclude])
       
-      hmdf <- sigs[(clus %in% clus_inc), 2:4]
+      hmdf <- sigs[(clus %in% clustersToInclude), 2:4]
       
-      
-      clus.split <- factor(paste0("clus\n", clus[clus %in% clus_inc]),
+      clus.split <- factor(paste0("clus\n", clus[clus %in% clustersToInclude]),
                            levels=cc_order)
       col_fun = colorRamp2(c(-2,0, 2), c("blue","white", "red"))
       
@@ -573,13 +616,14 @@ server = function(input,output, session){
       return(heatmap_obj)
     }
     return(assign_genes(df, R_thr=input$R2Thres))
-    
   })
   
-  outputDF <- reactive({
-    odf <- deconvolute()
-    return(colnames(odf))
-  })
+  
+  
+  #outputDF <- reactive({ # can be deleted probably since output$coln isnt used
+  #  odf <- deconvolute()
+  #  return(colnames(odf))
+  #})
   
   output$downloadData <- downloadHandler(
     filename = function() {
@@ -595,17 +639,17 @@ server = function(input,output, session){
     }
   )
   
-  output$coln <- renderText({outputDF()})
+  #output$coln <- renderText({outputDF()})
   
   observeEvent(input$norm, {print("apply norm")})
   observeEvent(input$deconvolute, {print("Deconvolute")})
-  #observeEvent(input$lfcThres)
   observe(firstFilter())
   observeEvent(input$H0Thres, {print(input$H0Thres)})
-  observe(outputDF())
+  #observe(outputDF())
   observeEvent(input$R2Thres, {print(input$R2Thres)})
   observeEvent(input$plottype, {print(input$plottype)})
   observeEvent(input$compFDR, {print("Compute FDR")})
+  
   observeEvent(input$show_heatmap, {
     ht1 <- HDF()
     InteractiveComplexHeatmapModal(input,output, session, ht1)
@@ -613,3 +657,32 @@ server = function(input,output, session){
 }
 
 shinyApp(ui, server)
+
+
+#clus#	LPS	pH	pHLPS
+#1	    0	  1 	 0
+#2	    0	 -1 	 0
+#3	    1	  0 	 0
+#6	   -1	  0 	 0
+#21	    1	  0 	-1
+#22	    1	  1 	-1
+#19	    0	  1 	-1
+#15	   -1	  0 	 1
+#17	   -1	 -1 	 1
+#11	    0	 -1 	 1
+#9	    0	  0 	 1
+#12	    1	  0 	 1
+#10	    0	  1 	 1
+#13	    1	 -1 	 1
+#18	    0	  0 	-1
+#24	   -1	  0 	-1
+#20	    0	 -1 	-1
+#26	   -1	 -1 	-1
+#4	    1	  1 	 0
+#5	    1	 -1 	 0
+#7	   -1	  1 	 0
+#8	   -1	 -1 	 0
+#14	    1	 -1 	 1
+#23	    1	 -1 	-1
+#16	   -1	  1 	 1
+#25	   -1	  1 	-1
