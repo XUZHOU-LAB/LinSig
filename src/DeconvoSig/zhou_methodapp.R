@@ -1,3 +1,7 @@
+library(AnnotationDbi)
+library("org.Mm.eg.db")
+library(clusterProfiler)
+
 library(DT)
 library(ggplot2)
 library(ggpubr)
@@ -9,6 +13,7 @@ library(InteractiveComplexHeatmap)
 library(RColorBrewer)
 library(VennDiagram)
 library(ggvenn)
+
 
 #TODO
 #optional qvalues
@@ -79,10 +84,13 @@ ui = fluidPage(
                          actionButton("show_heatmap", "Generate Heatmap"),
                          htmlOutput("heatmap_output")),
                 tabPanel("Enrichment Analysis",
-                         dataTableOutput("clusters"),
                          numericInput("minimumGenesinClus", "Minimum Genes in a Cluster",
                                       value=20, min=1, max=1000, step=1),
-                         selectInput("chooseCluster", "clusterChoice", choices = NA)
+                         checkboxGroupInput("clusterChoice", "Choose Cluster", choices = NA),
+                         #downloadButton("actionButtonEnrich", "Start GSEA"),
+                         actionButton("actionButtonEnrich", "Start GSEA"),
+                         #dataTableOutput("clusters"),
+                         plotOutput("enrichPlot")
                         )
     )
   )
@@ -206,7 +214,7 @@ deconvoluteFunction <- function(ratiosDF, countDF){
   #adds progress bar
   withProgress(message="Computing Model Statistics", value=0,{
     
-    print(ngen)
+    print(paste("Total number of genes:", ngen))
     for (i in 1:ngen){
       fit <- lm(Ratios[i,] ~ X)
       covB[i,] <- diag(vcov(fit))
@@ -229,8 +237,8 @@ deconvoluteFunction <- function(ratiosDF, countDF){
 }
 
 #compute P value with threshold
-calcPvalue <- function(Betas, covB, Threshold){
-  ttest_stat <- (abs(Betas) - log2(Threshold)) / sqrt(covB)
+calcPvalue <- function(betas, covB, treshold){
+  ttest_stat <- (abs(betas) - log2(treshold)) / sqrt(covB)
   ttest_stat <- data.frame(ttest_stat)
   Pvalue = 1 - apply(ttest_stat, 2, pt, df=4)
   return(Pvalue)
@@ -263,7 +271,7 @@ server = function(input,output, session){
   })
   # Function that filters based on q-value and Fold Change
   firstFilter <- reactive({
-    cntMat <- as.matrix(inputfile()[,1:8])
+    cntMat <- base::as.matrix(inputfile()[,1:8])
     
     DataPseudo <- MedianNorm(cntMat, CountThres=input$cntThres, pseudo=input$pseudo)
     F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4]) / (DataPseudo[,1] + DataPseudo[,2]))
@@ -529,53 +537,113 @@ server = function(input,output, session){
   
   # Render Table of all Genes
   output$stats <- renderDT({
+    # sigReal <- sigReal()
+    # boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
+    # df <- deconvolute()
+    # df[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
+    # colnames(df)[6:8] <- colnames(Pvalues_real())[2:4]
+    
+    df <- getSignificantOutputTable()
+    round(df, digits=4)
+    df$cluster <- generateClusters1()
+    df[,c(1:4,6:10)]
+  })
+  
+  # observeEvent(input$actionButtonEnrich, {
+  #   output$clusters <- renderDT({
+  #   clusterDT <- generateClusters()
+  #   clusterDT <- clusterDT[clusterDT$cluster %in% input$clusterChoice,]
+  #   #round(clusterDT, digit=4)
+  #   })
+  # })
+  
+  getSignificantOutputTable <- reactive({
     sigReal <- sigReal()
     boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
     df <- deconvolute()
-    df[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
-    colnames(df)[6:8] <- colnames(Pvalues_real())[2:4]
-    round(df[boolfilt,c(1,2,3,4,6,7,8,9)], digits=6)
-    
-  })
-  
-  output$clusters <- renderDT({
-    clusterDT <- generateClusters()
-    round(clusterDT, digit=4)
+    df[,c(5,6,7,8)] <- Pvalues_real()[,c(1,2,3,4)]
+    print(Pvalues_real()[1:4,])
+    colnames(df)[5:8] <- colnames(Pvalues_real())[1:4]
+    df <- df[boolfilt,c(1,2,3,4,5,6,7,8,9)]
   })
   
   generateClusters <- reactive({
-    df <- deconvolute()
-    p <- Pvalues_real()
-    
-    B_thr = 1
-    R_thr = input$R2Thres
+  
     minGenesInCluster = input$minimumGenesinClus
 
-    SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
-                  (abs(df[,3]) > B_thr & p[,3] < 0.05) |
-                  (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2>R_thr
-    print(paste("Significant Genes: ", sum(SIG_genes)))
-    df[,6:8] <- p[,2:4]
-    sigs <- df[SIG_genes,]
-      
+    sigs <- getSignificantOutputTable()
+    
     sts <- sign(sigs[,2:4])*(sigs[,6:8]<0.05)
     sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
     clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation 1:LPS, 3:pH, 9:pHLPS
-    cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
-    
+    cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25,0)
+
     clustersToInclude <- which(table(clus)>minGenesInCluster) # parameter for minimum amount of genes in a cluster
     clustersToInclude <- names(clustersToInclude)
-    cc_order <- paste0("clus\n", cluster_order[cluster_order %in% clustersToInclude])
-      
+    
     clusterDF <- sigs[(clus %in% clustersToInclude), 2:4]
     geneClusters <- clus[clus %in% clustersToInclude]
+    
+    modelTerms <- colnames(sigs[,2:4])
+    clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
+                    "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
+                    "T1+T2-T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
+                    "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
+                    "T1-T2+T3+", "T1-T2+T3-","no regulation")
+    clusterCode <- gsub("T1", modelTerms[2], clusterCode)
+    clusterCode <- gsub("T2", modelTerms[1], clusterCode)
+    clusterCode <- gsub("T3", modelTerms[3], clusterCode)
+    
+    clusterNames <- data.frame(clusterID = cluster_order,
+                               clusterCode = clusterCode)
+    geneClusters <- clusterNames$clusterCode[match(geneClusters, clusterNames$clusterID)]
     clusterDF$cluster <- geneClusters
     return(clusterDF)
   })
   
+  #TODO:
+  # gneratate cluster funcite vervangen door gneratecluster1 - niet essentieel
+  # dotplot size aanpassen? - niet essentieel
+  # outputCSV werkend maken met en zonder FDR - nodig.
+  # Background Genes? - niet nodig. standaard is genoeg
+  
+  #info page
+  #example dataset input?
+  
+  
+  
+  generateClusters1 <- reactive({
+    decoDF <- getSignificantOutputTable()
+    sts <- sign(decoDF[,2:4])*(decoDF[,6:8]<0.05)
+
+    sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
+    clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation 1:LPS, 3:pH, 9:pHLPS
+    
+    modelTerms <- colnames(decoDF[,2:4]) # replace pH / LPS etc with model terms
+    
+    cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25,0)
+    clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
+                    "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
+                    "T1+T2-T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
+                    "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
+                    "T1-T2+T3+", "T1-T2+T3-","no regulation")
+    clusterCode <- gsub("T1", modelTerms[2], clusterCode)
+    clusterCode <- gsub("T2", modelTerms[1], clusterCode)
+    clusterCode <- gsub("T3", modelTerms[3], clusterCode)
+    
+    clusterNames <- data.frame(clusterID = cluster_order,
+                               clusterCode = clusterCode)
+    geneClusters <- clusterNames$clusterCode[match(clus, clusterNames$clusterID)]
+
+    return(geneClusters)
+  })
+
+  
+  
+  
   observeEvent(generateClusters(), {
     choices <- unique(generateClusters()$cluster)
-    updateSelectInput(inputId = "chooseCluster", choices = choices) 
+    updateCheckboxGroupInput(inputId = "clusterChoice", choices = choices) 
   })
   
   #Render Heatmap Function
@@ -596,7 +664,7 @@ server = function(input,output, session){
       sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
       clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation
       c_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
-      
+       
       clustersToInclude <- which(table(clus)>20) # parameter for minimum amount of genes in a cluster
       clustersToInclude <- names(clustersToInclude)
       
@@ -635,17 +703,45 @@ server = function(input,output, session){
       
       outcsv <- joinFDRandGenes()
       
+      
       write.csv(outcsv, file, row.names = T)
     }
   )
   
-  #output$coln <- renderText({outputDF()})
+  startGSEA <- eventReactive(input$actionButtonEnrich, {
+    #output$enrichPlot <- renderPlot({
+      clusterDT <- generateClusters()
+      clusterDT <- clusterDT[clusterDT$cluster %in% input$clusterChoice,]
+      
+      clusterDT$entrez <- mapIds(org.Mm.eg.db, keys = rownames(clusterDT),
+                                 column = "ENTREZID", keytype = "SYMBOL")
+      clusterDT <- na.omit(clusterDT)
+
+      clusterList <- list()
+      for (cluster in unique(clusterDT$cluster)){
+        entrezInCluster <- clusterDT[clusterDT$cluster==cluster,]$entrez
+        cluster <- as.character(cluster)
+        clusterList[[cluster]] <- entrezInCluster
+      }
+
+      ck <- compareCluster(geneCluster = clusterList, 
+                           fun = enrichGO, 
+                           OrgDb = org.Mm.eg.db, 
+                           ont = "BP")
+      
+      return(dotplot(ck,
+                     label_format = 50))
+    #})
+  })
+  
+  output$enrichPlot <- renderPlot({
+    startGSEA()
+  })
   
   observeEvent(input$norm, {print("apply norm")})
   observeEvent(input$deconvolute, {print("Deconvolute")})
   observe(firstFilter())
   observeEvent(input$H0Thres, {print(input$H0Thres)})
-  #observe(outputDF())
   observeEvent(input$R2Thres, {print(input$R2Thres)})
   observeEvent(input$plottype, {print(input$plottype)})
   observeEvent(input$compFDR, {print("Compute FDR")})
@@ -659,30 +755,30 @@ server = function(input,output, session){
 shinyApp(ui, server)
 
 
-#clus#	LPS	pH	pHLPS
-#1	    0	  1 	 0
-#2	    0	 -1 	 0
-#3	    1	  0 	 0
-#6	   -1	  0 	 0
-#21	    1	  0 	-1
-#22	    1	  1 	-1
-#19	    0	  1 	-1
-#15	   -1	  0 	 1
-#17	   -1	 -1 	 1
-#11	    0	 -1 	 1
-#9	    0	  0 	 1
-#12	    1	  0 	 1
-#10	    0	  1 	 1
-#13	    1	 -1 	 1
-#18	    0	  0 	-1
-#24	   -1	  0 	-1
-#20	    0	 -1 	-1
-#26	   -1	 -1 	-1
-#4	    1	  1 	 0
-#5	    1	 -1 	 0
-#7	   -1	  1 	 0
-#8	   -1	 -1 	 0
-#14	    1	 -1 	 1
-#23	    1	 -1 	-1
-#16	   -1	  1 	 1
-#25	   -1	  1 	-1
+#clus#	LPS	pH	pHLPS code
+#1	    0	  1 	 0    pH+
+#2	    0	 -1 	 0    pH-
+#3	    1	  0 	 0    LPS+
+#6	   -1	  0 	 0    LPS-
+#21	    1	  0 	-1    LPS+pHLPS-
+#22	    1	  1 	-1    LPS+pH+pHLPS-
+#19	    0	  1 	-1    pH+pHLPS-
+#15	   -1	  0 	 1    LPS-pHLPS+
+#17	   -1	 -1 	 1    LPS-pH-pHLPS+
+#11	    0	 -1 	 1    pH-pHLPS+
+#9	    0	  0 	 1    pHLPS+
+#12	    1	  0 	 1    LPS+pHLPS+
+#10	    0	  1 	 1    pH+pHLPS+
+#13	    1	 -1 	 1    LPS+pH-pHLPS+
+#18	    0	  0 	-1    pHLPS-
+#24	   -1	  0 	-1    LPS-pHLPS-
+#20	    0	 -1 	-1    pH-pHLPS-
+#26	   -1	 -1 	-1    LPS-pH-pHLPS-
+#4	    1	  1 	 0    LPS+pH+
+#5	    1	 -1 	 0    LPS+pH-
+#7	   -1	  1 	 0    LPS-pH+
+#8	   -1	 -1 	 0    LPS-pH-
+#14	    1	 -1 	 1    LPS+pH-pHLPS+
+#23	    1	 -1 	-1    LPS+pH-pHLPS-
+#16	   -1	  1 	 1    LPS-pH+pHLPS+
+#25	   -1	  1 	-1    LPS-pH+pHLPS-
