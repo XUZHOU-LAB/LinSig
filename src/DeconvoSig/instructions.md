@@ -49,7 +49,7 @@ ctrl \; vs \; condB\\
 condA \; vs \;condAB\\ 
 ctrl \; vs \; condAB
 \end{bmatrix}
-= 
+=
 \begin{bmatrix}
 0 & 1 & 0\\ 
 0 & 1 & 1\\ 
@@ -57,7 +57,7 @@ ctrl \; vs \; condAB
 1 & 0 & 1\\ 
 1 & 1 & 1
 \end{bmatrix}
- *
+*
 \begin{bmatrix}
 \beta_{condB} \\ 
 \beta_{condA} \\ 
@@ -113,15 +113,15 @@ Each gene fit also comes with an R2 value, which can be used as a filter to disc
 - **Home page**: Here you will find a datatable with all the significant genes in the dataset. It's possible to download this dataset at the bottom left of the page. There's also an informative Venn diagram that demonstrates how many genes are regulated by signal A/B/AB or a combination thereof.
 
 
--**R2~Beta Plots**: Here you can find 3 figures for signal A, B and A+B. The R2 of the linear model is plotted against the $\beta_{condA}$, $\beta_{condB}$, $\beta_{condA+B}$ component for each gene.
+- **R2~Beta Plots**: Here you can find 3 figures for signal A, B and A+B. The R2 of the linear model is plotted against the $\beta_{condA}$, $\beta_{condB}$, $\beta_{condA+B}$ component for each gene.
 
--**FDR**: This page shows some figures about the False Discovery Rate calculation based on the random sampling of the input dataset. The first plot shows the mean counts plotted against the variance (mean-variance plot). The second plot is demonstrating the chance of a false discovery (a gene that looks like it's regulated but its not actually regulated) over a varying fold change. The chance of a false discovery is the lowest when the fold change is high, because its very unlikely for a gene to be appear upregulated when there's such a big difference between e.g. the control condition and condition A.
+- **FDR**: This page shows some figures about the False Discovery Rate calculation based on the random sampling of the input dataset. The first plot shows the mean counts plotted against the variance (mean-variance plot). The second plot is demonstrating the chance of a false discovery (a gene that looks like it's regulated but its not actually regulated) over a varying fold change. The chance of a false discovery is the lowest when the fold change is high, because its very unlikely for a gene to be appear upregulated when there's such a big difference between e.g. the control condition and condition A.
 
--**Volcano Plots**: This is a common plot with differential expression analysis. The y-axis shows log p-value and x-axis the fold change. The user can drag and drop a selection square in the figure in order to look at a certain group of interest. 
+- **Volcano Plots**: This is a common plot with differential expression analysis. The y-axis shows log p-value and x-axis the fold change. The user can drag and drop a selection square in the figure in order to look at a certain group of interest. 
 
--**Heatmap**: This plot shows a heatmap of genes clustered by regulation type. Only clusters with more than 20 genes are included.
+- **Heatmap**: This plot shows a heatmap of genes clustered by regulation type. Only clusters with more than 20 genes are included.
 
--**Enrichment Analysis**: Here the user can select clusters and perform Gene Enrichment Analysis using the clusterProfiler package in R. This process can take up to 5 minutes, depending on the computer used.
+- **Enrichment Analysis**: Here the user can select clusters and perform Gene Enrichment Analysis using the clusterProfiler package in R. This process can take up to 5 minutes, depending on the computer used.
 
 
 

@@ -9,7 +9,6 @@ library(circlize)
 library(ComplexHeatmap)
 library(InteractiveComplexHeatmap)
 library(RColorBrewer)
-#library(VennDiagram) # not necessary?
 library(ggvenn)
 
 library(AnnotationDbi)
@@ -22,8 +21,6 @@ library(markdown)
 #options(repos = BiocManager::repositories())
 
 #TODO
-# optional qvalues: if not detected -> treat evertying as 0.
-# clearer, more concise UI -> Instructions tab + example datafile
 # colnames error message -> ?
 # remove LOWESS option 
 
@@ -55,7 +52,6 @@ ui = fluidPage(
                  value=10,
                  min=0,
                  step=0.1),
-    #  actionButton("normalise","Compute Normalized Ratios"),
     hr(),
     sliderInput("lfcThres", "LogFoldChange Threshold", #& qval<0.05
                 value=0.585, min=0, max=3, step=0.001),
@@ -67,7 +63,7 @@ ui = fluidPage(
     hr(),
     actionButton("compFDR", "Compute False Discovery Rate"),
     numericInput("RDFsize", "Random Dataset Size",
-                 value=40000, min=10000, step=1),
+                 value=20000, min=10000, step=1),
     sliderInput("FCFDR", "FC Selection for FDR",
                 value=1, min=1, max=5, step=0.01),
     downloadButton('downloadData', 'Download Data')
@@ -706,23 +702,26 @@ server = function(input,output, session){
     return(heatmap_obj)
   })
   
-  
-  
-  #outputDF <- reactive({ # can be deleted probably since output$coln isnt used
-  #  odf <- deconvolute()
-  #  return(colnames(odf))
-  #})
-  
   output$downloadData <- downloadHandler(
     filename = function() {
       paste("datatable", ".csv", sep = "")
     },
     content = function(file) {
-      # currently only works if you generated the random df too
-      # add try catch with try:df+FDR , catch:df
-      
-      outcsv <- joinFDRandGenes()
-      
+      outcsv <- tryCatch( 
+        {
+          joinFDRandGenes()
+        },
+        error = function(e) {
+          decoDF <- deconvolute()
+          sigReal <- sigReal()
+          boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
+          decoDF[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
+          colnames(decoDF)[6:8] <- colnames(Pvalues_real())[2:4]
+          filteredDF <- round(decoDF[boolfilt,c(1,2,3,4,6,7,8,9)], digits=6)
+          return(filteredDF)
+          
+        }
+      )
       
       write.csv(outcsv, file, row.names = T)
     }
