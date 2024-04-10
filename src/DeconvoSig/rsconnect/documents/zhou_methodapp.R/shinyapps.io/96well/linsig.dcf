@@ -1,0 +1,13 @@
+name: LinSig
+title: LinSig
+username: 96well
+account: 96well
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 11709821
+bundleId: 8476978
+url: https://zhou-lab.shinyapps.io/LinSig/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: deconvolution_logic.png|instructions.md|instructions.Rmd

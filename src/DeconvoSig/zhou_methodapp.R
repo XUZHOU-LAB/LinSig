@@ -1,6 +1,4 @@
-library(AnnotationDbi)
-library("org.Mm.eg.db")
-library(clusterProfiler)
+
 
 library(DT)
 library(ggplot2)
@@ -11,15 +9,29 @@ library(circlize)
 library(ComplexHeatmap)
 library(InteractiveComplexHeatmap)
 library(RColorBrewer)
-library(VennDiagram)
+#library(VennDiagram) # not necessary?
 library(ggvenn)
 
+library(AnnotationDbi)
+library("org.Mm.eg.db")
+library(clusterProfiler)
+library(markdown)
+
+# for deploying paste in R console:
+#library(BiocManager)
+#options(repos = BiocManager::repositories())
 
 #TODO
-#optional qvalues
-#multiple replicates - right now only 2...
-#clearer, more concise UI
-# colnames error message
+# optional qvalues: if not detected -> treat evertying as 0.
+# clearer, more concise UI -> Instructions tab + example datafile
+# colnames error message -> ?
+# remove LOWESS option 
+
+#TODO 
+# MULTIPLE REPLICATES
+# edit FDR calculation so it can deal with multiple reps
+# edit P value so it can deal with multiple replicates
+# column name grabber function maken. At least edit to use multiple replicates
 
 ###################################################
 ########## U S E R   I N T E R F A C E ############
@@ -31,7 +43,8 @@ ui = fluidPage(
               accept = c("text/csv",
                          "text/comma-separated-values,text/plain",
                          ".csv")),
-    
+    numericInput("reps", "Number of Replicates",
+                 value=2, min=2, step=1),
     checkboxInput("lowess", "LOWESS Norm", value=FALSE),
     
     numericInput("pseudo", "Add Pseudo Count",
@@ -44,9 +57,9 @@ ui = fluidPage(
                  step=0.1),
     #  actionButton("normalise","Compute Normalized Ratios"),
     hr(),
-    sliderInput("lfcThres", "LFC Threshold (LFC>X & qval<0.05)",
+    sliderInput("lfcThres", "LogFoldChange Threshold", #& qval<0.05
                 value=0.585, min=0, max=3, step=0.001),
-    sliderInput("H0Thres", "Null-Hypothesis Test FC Threshold",
+    sliderInput("H0Thres", "Null-Hypo Test FC Threshold",
                 value=1.5, min=1, max=4, step=0.01),
     sliderInput("R2Thres", "R2 Threshold",
                 value=0.8, min=0.1, max=1, step=0.01),
@@ -87,11 +100,16 @@ ui = fluidPage(
                          numericInput("minimumGenesinClus", "Minimum Genes in a Cluster",
                                       value=20, min=1, max=1000, step=1),
                          checkboxGroupInput("clusterChoice", "Choose Cluster", choices = NA),
-                         #downloadButton("actionButtonEnrich", "Start GSEA"),
                          actionButton("actionButtonEnrich", "Start GSEA"),
                          #dataTableOutput("clusters"),
                          plotOutput("enrichPlot")
-                        )
+                        ),
+                tabPanel("Instructions",
+                         downloadButton("downloadExample", "Download Example Dataset"),
+                         includeMarkdown("./instructions.html")
+                         )
+                         
+                         
     )
   )
 )
@@ -132,77 +150,81 @@ RNAseqLowess <- function(LogIntensity, LogRatios){
   return(Ratiosnorm)
 }
 # Function for normalization with LOWESS
-normalize <- function(inputdf, cntThres, pseudo, lowess=TRUE){
+normalize <- function(inputdf, cntThres, pseudo, replicates, lowess=FALSE){
   
   print("Applying Normalisation")
   cntMat <- as.matrix(inputdf[,1:8])
   DataPseudo <- MedianNorm(cntMat, CountThres=cntThres, pseudo=pseudo)
   
-  LogRatios <- matrix(nrow=length(DataPseudo[,1]), ncol=10) #empty matrix
-  LogRatios[,1] <- log2(DataPseudo[,3] / DataPseudo[,1])
-  LogRatios[,2] <- log2(DataPseudo[,7] / DataPseudo[,5])
-  LogRatios[,3] <- log2(DataPseudo[,5] / DataPseudo[,1])
-  LogRatios[,4] <- log2(DataPseudo[,7] / DataPseudo[,3])
-  LogRatios[,5] <- log2(DataPseudo[,7] / DataPseudo[,1])
-  LogRatios[,6] <- log2(DataPseudo[,4] / DataPseudo[,2])
-  LogRatios[,7] <- log2(DataPseudo[,8] / DataPseudo[,6])
-  LogRatios[,8] <- log2(DataPseudo[,6] / DataPseudo[,2])
-  LogRatios[,9] <- log2(DataPseudo[,8] / DataPseudo[,4])
-  LogRatios[,10] <-log2(DataPseudo[,8] / DataPseudo[,2])
+  #automatically detect replicates?
+  #replicate input number
   
-  LogIntensity <- matrix(nrow=length(DataPseudo[,1]), ncol=10) #empty matrix
-  LogIntensity[,1] <- log2(DataPseudo[,3] * DataPseudo[,1])
-  LogIntensity[,2] <- log2(DataPseudo[,7] * DataPseudo[,5])
-  LogIntensity[,3] <- log2(DataPseudo[,5] * DataPseudo[,1])
-  LogIntensity[,4] <- log2(DataPseudo[,7] * DataPseudo[,3])
-  LogIntensity[,5] <- log2(DataPseudo[,7] * DataPseudo[,1])
-  LogIntensity[,6] <- log2(DataPseudo[,4] * DataPseudo[,2])
-  LogIntensity[,7] <- log2(DataPseudo[,8] * DataPseudo[,6])
-  LogIntensity[,8] <- log2(DataPseudo[,6] * DataPseudo[,2])
-  LogIntensity[,9] <- log2(DataPseudo[,8] * DataPseudo[,4])
-  LogIntensity[,10] <-log2(DataPseudo[,8] * DataPseudo[,2])
+  col_ctrl <- 1:replicates
+  col_condA <- 1:replicates + replicates
+  col_condB <- 1:replicates + replicates*2
+  col_condAB <- 1:replicates + replicates*3
   
-  NumRatios <- length(LogRatios[1,])
+  LogRatios <- matrix(nrow=length(DataPseudo[,1]), ncol=replicates*5)    #empty matrix
+  for (i in 1:replicates){
+    LogRatios[,1+ (5*(i-1))] <- log2(DataPseudo[, col_condA[i]] / DataPseudo[, col_ctrl[i]])
+    LogRatios[,2+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_condB[i]])
+    LogRatios[,3+ (5*(i-1))] <- log2(DataPseudo[, col_condB[i]] / DataPseudo[, col_ctrl[i]])
+    LogRatios[,4+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_condA[i]])
+    LogRatios[,5+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_ctrl[i]])
+  }
   
-  if(lowess==FALSE){
+  if (lowess == FALSE){
     rownames(LogRatios) <- rownames(DataPseudo)
     return(LogRatios)
   }
   
-  withProgress(message="Computing Normalized Ratios", value=0,{
-    
-    Ratios <- matrix(ncol=10, nrow=length(LogRatios[,1]))
-    for (i in 1:NumRatios){
-      Ratios[,i] <- RNAseqLowess(LogIntensity[,i], LogRatios[,i])
-      incProgress(1/NumRatios)
-    }
-  })
-  rownames(Ratios) <- rownames(DataPseudo)
-  return(Ratios)
-  
+  else if (lowess == TRUE){
+    LogIntensity <- matrix(nrow=length(DataPseudo[,1]), ncol=10) #empty matrix
+    LogIntensity[,1] <- log2(DataPseudo[,3] * DataPseudo[,1])
+    LogIntensity[,2] <- log2(DataPseudo[,7] * DataPseudo[,5]) # LOWESS
+    LogIntensity[,3] <- log2(DataPseudo[,5] * DataPseudo[,1])
+    LogIntensity[,4] <- log2(DataPseudo[,7] * DataPseudo[,3])
+    LogIntensity[,5] <- log2(DataPseudo[,7] * DataPseudo[,1])
+    LogIntensity[,6] <- log2(DataPseudo[,4] * DataPseudo[,2])
+    LogIntensity[,7] <- log2(DataPseudo[,8] * DataPseudo[,6])
+    LogIntensity[,8] <- log2(DataPseudo[,6] * DataPseudo[,2])
+    LogIntensity[,9] <- log2(DataPseudo[,8] * DataPseudo[,4])
+    LogIntensity[,10] <-log2(DataPseudo[,8] * DataPseudo[,2])
+    NumRatios <- length(LogRatios[1,])
+    withProgress(message="Computing Normalized Ratios", value=0,{
+      Ratios <- matrix(ncol=10, nrow=length(LogRatios[,1]))
+      for (i in 1:NumRatios){
+        Ratios[,i] <- RNAseqLowess(LogIntensity[,i], LogRatios[,i])
+        incProgress(1 / NumRatios)
+      }
+    })
+    rownames(Ratios) <- rownames(DataPseudo)
+    return(Ratios)
+  }
 }
 
 deconvoluteFunction <- function(ratiosDF, countDF){
   Ratios <- ratiosDF
-  strucvec <- c(0,1,0,
-                0,1,1,
-                1,0,0,
-                1,0,1,
-                1,1,1,
-                0,1,0,
-                0,1,1,
-                1,0,0,
-                1,0,1,
-                1,1,1)
-  strucmat <- matrix(strucvec, ncol=3, byrow=T)
-  X <- strucmat
   
-  A = length(Ratios[,1]) #number of genes
-  B = matrix(0, nrow=A,ncol=4);
+  strucvec <- rep(c(0,1,0, # creates a matrix for X in y ~ X. X is dependent on number of replicates
+                    0,1,1, # 5 rows in X for each replicate
+                    1,0,0,
+                    1,0,1,
+                    1,1,1),
+                  (length(Ratios[1,])/5))
+  
+  numberOfGenes = length(Ratios[,1])
+  
+  X <- matrix(strucvec, 
+                     ncol=3, 
+                     byrow=T)
+  B = matrix(0, nrow=numberOfGenes,ncol=4);
   
   #get column data
-  cc <- strsplit(colnames(countDF)[1:8], "_")
-  cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1]
+  cc <- strsplit(colnames(countDF)[1:8], "_") # change to 4*n_replicates
+  print(cc)
+  cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
+  print(cols)
   colnames(X) <- c(cols[2], cols[1], cols[3])
   
   rsquare <- vector()
@@ -216,9 +238,9 @@ deconvoluteFunction <- function(ratiosDF, countDF){
     
     print(paste("Total number of genes:", ngen))
     for (i in 1:ngen){
-      fit <- lm(Ratios[i,] ~ X)
+      fit <- lm(Ratios[i,] ~ X) # for each gene, fit linear model
       covB[i,] <- diag(vcov(fit))
-      rsquare[i] <- summary(fit)$r.squared
+      rsquare[i] <- summary(fit)$adj.r.squared
       incProgress(1/ngen)
     }
   })
@@ -237,10 +259,13 @@ deconvoluteFunction <- function(ratiosDF, countDF){
 }
 
 #compute P value with threshold
-calcPvalue <- function(betas, covB, treshold){
+calcPvalue <- function(betas, covB, treshold){ # edit P statistic for mulitple reps
   ttest_stat <- (abs(betas) - log2(treshold)) / sqrt(covB)
   ttest_stat <- data.frame(ttest_stat)
-  Pvalue = 1 - apply(ttest_stat, 2, pt, df=4)
+  n_samples = 4*2 # replicates * conditions
+  n_var = 3 # number of variables B1, B2, B3
+  DoF <- n_samples - n_var - 1
+  Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
   return(Pvalue)
 }
 
@@ -267,6 +292,7 @@ server = function(input,output, session){
   
   normRatios <- eventReactive(input$deconvolute, {
     return(normalize(inputfile(), cntThres=input$cntThres, pseudo=input$pseudo,
+                     replicates = input$reps,
                      lowess=input$lowess))
   })
   # Function that filters based on q-value and Fold Change
@@ -281,9 +307,13 @@ server = function(input,output, session){
     
     Fold <- data.frame(F_AvsC, F_ABvsB, F_ABvsA, F_BvsC)
     
-    #TODO: implement function: if q-values empty, set all to zero
-    
-    qvals <- inputfile()[,9:12]
+    inputdataset <- inputfile() # needs DOCUMENTATION
+    if (ncol(inputfile() != input$replicates*4)){ # optional q-values filtering
+      inputdataset <- inputfile()
+      inputdataset[,9:12] <- 0
+      
+    }
+    qvals <- inputdataset[,9:12]
     countthresholdFilter <- rownames(DataPseudo)
     qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,]
     
@@ -372,9 +402,10 @@ server = function(input,output, session){
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
     
     normalizedRandomDF <- normalize(RandomDF, 
-                                    cntThres = input$cntThres, 
+                                    cntThres = input$cntThres, # update so it can deal with replicates 
                                     pseudo = input$pseudo, 
-                                    lowess = input$lowess)
+                                    lowess = input$lowess,
+                                    replicates = 2)
     
     modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF)
     
@@ -468,7 +499,7 @@ server = function(input,output, session){
     B <- plotFun(dat=modelStats, x=cols[2], y="R2", sigs=sigReal[[2]])
     AB <-plotFun(dat=modelStats, x=cols[3], y="R2", sigs=sigReal[[3]])
     
-    plot <- ggarrange(A, B, AB, ncol=3)
+    plot <- ggpubr::ggarrange(A, B, AB, ncol=3)
     annotate_figure(plot, top=text_grob("Betas after LFC>X and qval<0.05 Selection"))
     plot
   })
@@ -549,14 +580,6 @@ server = function(input,output, session){
     df[,c(1:4,6:10)]
   })
   
-  # observeEvent(input$actionButtonEnrich, {
-  #   output$clusters <- renderDT({
-  #   clusterDT <- generateClusters()
-  #   clusterDT <- clusterDT[clusterDT$cluster %in% input$clusterChoice,]
-  #   #round(clusterDT, digit=4)
-  #   })
-  # })
-  
   getSignificantOutputTable <- reactive({
     sigReal <- sigReal()
     boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
@@ -606,11 +629,7 @@ server = function(input,output, session){
   # dotplot size aanpassen? - niet essentieel
   # outputCSV werkend maken met en zonder FDR - nodig.
   # Background Genes? - niet nodig. standaard is genoeg
-  
-  #info page
-  #example dataset input?
-  
-  
+
   
   generateClusters1 <- reactive({
     decoDF <- getSignificantOutputTable()
@@ -651,7 +670,7 @@ server = function(input,output, session){
     df <- deconvolute()
     p <- Pvalues_real()
     
-    assign_genes <- function(df, B_thr=1, R_thr=0.8){
+    assign_genes <- function(df, B_thr=0.585, R_thr=0.8){
       print(colnames(df))
       SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
                     (abs(df[,3]) > B_thr & p[,3] < 0.05) |
@@ -683,7 +702,8 @@ server = function(input,output, session){
                              cluster_columns = F)
       return(heatmap_obj)
     }
-    return(assign_genes(df, R_thr=input$R2Thres))
+    heatmap_obj <- assign_genes(df, R_thr=input$R2Thres)
+    return(heatmap_obj)
   })
   
   
@@ -748,8 +768,25 @@ server = function(input,output, session){
   
   observeEvent(input$show_heatmap, {
     ht1 <- HDF()
-    InteractiveComplexHeatmapModal(input,output, session, ht1)
+    InteractiveComplexHeatmapWidget(input,output, session, ht1,
+                                    output_id = "heatmap_output")
   })
+
+  
+  output$downloadExample <- downloadHandler(
+    filename = function() {
+      paste("IL6IL10_reduced_dataset", ".csv", sep = "")
+    },
+    content = function(file) {
+
+      exampleData <- read.csv("./IL6IL10_reduced_df.csv",
+                              header = T,
+                              row.names = 1)
+      
+      write.csv(exampleData, file, row.names = T)
+    }
+  )
+
 }
 
 shinyApp(ui, server)
