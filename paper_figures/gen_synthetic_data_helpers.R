@@ -8,29 +8,34 @@ gen_randomstats <- function(sourcedf, size=20000, nrep=2, lowessn=0, onlyDF=0,nc
   
   lmucov <- compute_log_mu_cov(normed, nrep=nrep)
   
+  
+  # randomly draw a coefficient of variation within a bin
   coefs_of_variation <- sample_cov_by_binned_mu(lmucov, size=20000, n_bins=20)
   
+  
+  # Generate new row means
   mustat          <- MASS::fitdistr(rowMeans(normed), "lognormal")
   new_row_means   <- rlnorm(size, mustat$estimate[1], mustat$estimate[2])
   onrm            <- sort(new_row_means)
-  sampledMUCOV <- data.frame(
+  
+  
+  sampledMuCoV <- data.frame(
     mu  = log(onrm),
     cov = coefs_of_variation
   )
   
-  # draw new counts from normal distribution using mu and CoV
-  gtt <- t(round(apply(sampledMUCOV,1, FUN=drawreps), 1))
+  # draw new counts from normal distribution using mu (row mean) and CoV
+  synthetic_dataset <- t(
+      apply(sampledMuCoV, 1, FUN=drawreps, nrep=nrep))
   
-  # remove negative counts
-  gtt[gtt<0] <- 1
   
-  return(NULL)
+  return(round(synthetic_dataset, 1))
 }
 
 
 
 
-# Helper function: compute per‐condition means
+# compute per‐condition means (between replicates)
 compute_condition_means <- function(df, nrep = 2) {
   # Build the column indices for each condition
   col_groups <- list(
@@ -106,6 +111,7 @@ sample_cov_by_binned_mu <- function(log_mucov_df, size = 20000, n_bins = 20) {
     mu_bin = cut(mu, breaks = n_bins)
   )
   
+
   # Sample cov values proportionally within each bin
   ncovs <- unlist(lapply(split(binned_df, binned_df$mu_bin), function(bin_df) {
     bin_size <- nrow(bin_df)
@@ -113,6 +119,7 @@ sample_cov_by_binned_mu <- function(log_mucov_df, size = 20000, n_bins = 20) {
     sample(bin_df$cov, n_samples, replace = TRUE)
   }))
   
+
   # Ensure exactly `size` values
   if (length(ncovs) > 20000) {
     ncovs <- ncovs[seq_len(20000)]
@@ -121,14 +128,21 @@ sample_cov_by_binned_mu <- function(log_mucov_df, size = 20000, n_bins = 20) {
     ncovs <- c(ncovs, sample(ncovs, 20000 - length(ncovs), replace = TRUE))
   }
   
-  return(ncovs)
+  return(unname(ncovs))
 }
 
 
-drawreps <- function(mu_cov_df, rep=nrep){
-  rnorm(n=4*nrep, 
-        mean=exp(mu_cov_df$mu), 
-        sd=exp(mu_cov_df$mu+mu_cov_df$cov))
+drawreps <- function(mu_cov_vec, nrep = 2) {
+  mu <- mu_cov_vec["mu"]
+  cov <- mu_cov_vec["cov"]
+  
+  random_counts <- rnorm(
+    n = 4 * nrep,
+    mean = exp(mu),
+    sd = exp(mu + cov)
+  )
+  random_counts[random_counts < 0] <- 1
+  return(random_counts)
 }
 
 
