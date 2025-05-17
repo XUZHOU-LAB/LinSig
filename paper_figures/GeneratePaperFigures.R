@@ -157,64 +157,8 @@ ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
 }
 
 gen_randomstats <- function(sourcedf, size=20000, nrep=2, lowessn=0, onlyDF=0,nclus=NULL){
-  normed <- MedianNorm(sourcedf[rowMeans(sourcedf)>10,]) # filter out low counts
   
-  col_ctrl <- 1:nrep + 0*nrep # col 1,2 if 2 replicates
-  col_condA <- 1:nrep + 1*nrep # col 3,4 if 2 replicates
-  col_condB <- 1:nrep + 2*nrep  # col 5,6 if 2 replicates
-  col_condAB <- 1:nrep + 3*nrep  # col 7,8 if 2 replicates
-  
-  mean_per_condition <- matrix(ncol=4,nrow=nrow(normed))
-  mean_per_condition[,1] <- rowMeans(normed[,col_ctrl])
-  mean_per_condition[,2] <- rowMeans(normed[,col_condA])
-  mean_per_condition[,3] <- rowMeans(normed[,col_condB])
-  mean_per_condition[,4] <- rowMeans(normed[,col_condAB])
-  
-  sd_per_condition <- matrix(ncol=4,nrow=nrow(normed))
-  sd_per_condition[,1] <- sqrt(rowSums((rowMeans(normed[,col_ctrl]) - normed[,col_ctrl])**2))
-  sd_per_condition[,2] <- sqrt(rowSums((rowMeans(normed[,col_condA]) - normed[,col_condA])**2))
-  sd_per_condition[,3] <- sqrt(rowSums((rowMeans(normed[,col_condB]) - normed[,col_condB])**2))
-  sd_per_condition[,4] <- sqrt(rowSums((rowMeans(normed[,col_condAB]) - normed[,col_condAB])**2))
-  
-  mucov<-data.frame(mu=array(mean_per_condition), cov=array(sd_per_condition/mean_per_condition))
-  lmucov <- log(mucov)
-  
-  #perform data binning on points variable
-  olmucov <- lmucov[order(lmucov$mu),]
-  binmucov <- olmucov %>% mutate(mu_bin = cut(mu, breaks=20))
-  ncovs <- c()
-  
-  #sample cov between each bin
-  for (i in unique(binmucov$mu_bin)){
-    nsamp <- size
-    bin_size <- nrow(binmucov[binmucov$mu_bin==i,])
-    newsamplesize <- round((bin_size/nrow(binmucov))*nsamp)
-    #print(newsamplesize)
-    covs <- sample(binmucov[binmucov$mu_bin==i,]$cov, newsamplesize, replace=T)
-    ncovs <- c(ncovs,covs)
-  }
-  
-  mustat <-MASS::fitdistr(rowMeans(normed), "lognormal")
-  new_row_means <- rlnorm(size, mustat[[1]][1], mustat[[1]][2])
-  onrm <- new_row_means[order(new_row_means)]
-  sampledMUCOV <- data.frame(cbind(log(onrm), ncovs))
-  colnames(sampledMUCOV) <- c("mu", "cov")
-  
-  sampledMUCOV$mu
-  sampledMUCOV$cov
-  
-  
-  
-  drawreps <- function(mucovr, rep=4*nrep){
-    rnorm(n=rep, mean=exp(mucovr[1]), sd=exp(mucovr[1]+mucovr[2]))
-  }
-  
-  gtt <- t(round(apply(sampledMUCOV,1, FUN=drawreps), 1))
-  gtt[gtt<0] <- 1
-  
-  if(onlyDF==1){
-    return(gtt)
-  }
+  gtt <- generate_synthetic_data(sourcedf=sourcedf, size=size, nrep=2)
   
   #mediannorm
   normedR <- MedianNorm(gtt)
