@@ -1,4 +1,4 @@
-# figure generation
+# figure generation for 2 replicates
 
 
 # For FDR/Sens LFC/Sens Classification Barplots
@@ -14,58 +14,80 @@ library(MASS)
 library(cellsigsyn)
 library(parallel)
 
-compute_ratiosR <- function(data, nreps, pseudo_count=1, lowess_norm=1, col_ctrl=NULL,
-                            col_condA=NULL, col_condB=NULL, col_condAB=NULL){
+
+### PARAMETERS ###
+params <- new.env(parent = emptyenv())
+params$struc_vec <- c(0,1,0, # 
+                      0,1,1, #
+                      1,0,0, #
+                      1,0,1, #
+                      1,1,1) #
+
+
+
+compute_ratiosR <- function(df, 
+                            nreps, 
+                            pseudo_count=1, # default 1
+                            lowess_norm=FALSE # default off
+                            ){
+  
+  # Assume first 2 columns are for CTRL, next 2 for Condition A, next 2 for Condition B etc. (for 2 replicates)
+  col_ctrl <- 1:nreps + 0*nreps # col 1,2 if 2 replicates
+  col_condA <- 1:nreps + 1*nreps # col 3,4 if 2 replicates
+  col_condB <- 1:nreps + 2*nreps  # col 5,6 if 2 replicates
+  col_condAB <- 1:nreps + 3*nreps  # col 7,8 if 2 replicates
+  
+  dfPseudo <- df + pseudo_count # add pseudo count to dataset
+
+  LogRatios <- matrix(nrow=length(dfPseudo[,1]), ncol=nreps*5) # initialize empty matrix
+  LogIntensity <- matrix(nrow=length(dfPseudo[,1]), ncol=nreps*5) # initialize empty matrix
   
   
-  col_ctrl <- 1:nreps
-  col_condA <- 1:nreps + 1*nreps 
-  col_condB <- 1:nreps + 2*nreps 
-  col_condAB <- 1:nreps + 3*nreps 
-  
-  DataPseudo <- data + pseudo_count
-  reps <- length(col_ctrl)
-  
-  LogRatios <- matrix(nrow=length(DataPseudo[,1]), ncol=reps*5) #empty matrix
-  LogIntensity <- matrix(nrow=length(DataPseudo[,1]), ncol=reps*5) #empty matrix
-  
-  for (i in 1:reps){
-    LogRatios[,1+ (5*(i-1))] <- log2(DataPseudo[, col_condA[i]] / DataPseudo[, col_ctrl[i]])
-    LogRatios[,2+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_condB[i]])
-    LogRatios[,3+ (5*(i-1))] <- log2(DataPseudo[, col_condB[i]] / DataPseudo[, col_ctrl[i]])
-    LogRatios[,4+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_condA[i]])
-    LogRatios[,5+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_ctrl[i]])
+  # Compute log ratios
+  print("computing log ratios")
+  for (i in 1:nreps){
+    LogRatios[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] / dfPseudo[, col_ctrl[i]])
+    LogRatios[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condB[i]])
+    LogRatios[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] / dfPseudo[, col_ctrl[i]])
+    LogRatios[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condA[i]])
+    LogRatios[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_ctrl[i]])
     
-    LogIntensity[,1+ (5*(i-1))] <- log2(DataPseudo[, col_condA[i]] * DataPseudo[, col_ctrl[i]])
-    LogIntensity[,2+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] * DataPseudo[, col_condB[i]])
-    LogIntensity[,3+ (5*(i-1))] <- log2(DataPseudo[, col_condB[i]] * DataPseudo[, col_ctrl[i]])
-    LogIntensity[,4+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] * DataPseudo[, col_condA[i]])
-    LogIntensity[,5+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] * DataPseudo[, col_ctrl[i]])
+    LogIntensity[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] * dfPseudo[, col_ctrl[i]])
+    LogIntensity[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condB[i]])
+    LogIntensity[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] * dfPseudo[, col_ctrl[i]])
+    LogIntensity[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condA[i]])
+    LogIntensity[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_ctrl[i]])
   }
   n_ratios <- length(LogRatios[1,])
   
-  if (lowess_norm==0) {
-    message("no lowess normalization")
-    rownames(LogRatios) <- rownames(data)
-    return(LogRatios)}
   
-  else{
-    message("performing lowess normalization")
-    Ratios <- matrix(ncol=n_ratios, nrow=length(LogRatios[,1]))
-    pb <- txtProgressBar(min = 0, max = n_ratios, initial = 0, char = "=", style = 3)
-    
-    for (i in 1:n_ratios){
-      Ratios[,i] <- RNAseqLowess(LogIntensity[,i], LogRatios[,i])
-      setTxtProgressBar(pb,i)
-    }
-    rownames(Ratios) <- rownames(data)
-    return(Ratios)
+  if (!lowess_norm) { # skip ahead if no Lowess normalization
+    rownames(LogRatios) <- rownames(df)
+    return(LogRatios)
   }
+  
+  print("Performing LOWESS normalization...")
+  Ratios <- matrix(nrow = nrow(LogRatios), ncol = ncol(LogRatios))
+  colnames(Ratios) <- col_names
+  pb <- txtProgressBar(min = 0, max = ncol(LogRatios), style = 3)
+  
+  for (i in seq_len(ncol(LogRatios))) {
+    Ratios[, i] <- RNAseqLowess(LogIntensity[, i], LogRatios[, i])
+    setTxtProgressBar(pb, i)
+  }
+  close(pb)
+  
+  rownames(Ratios) <- rownames(df)
+  return(Ratios)
 }
 
-parfunct <- function(ratios, nclus){
+
+parfunct <- function(ratios, nclus){ # parallel_lm_function
   clust <- makeCluster(nclus)
-  strucvec <- rep(c(0,1,0,0,1,1,1,0,0,1,0,1,1,1,1), (length(ratios[1,])/5))
+  
+  strucvec <- rep(params$struc_vec, # replicate structural matrix for each replicate
+                  (length(ratios[1,])/5))
+  
   X <- matrix(strucvec, ncol=3, byrow=T)
   clusterExport(clust, "X", envir=environment())
   mstats <- parApply(clust, ratios, 1, function(x){
@@ -78,7 +100,8 @@ parfunct <- function(ratios, nclus){
 }
 
 ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
-  strucvec <- rep(c(0,1,0,0,1,1,1,0,0,1,0,1,1,1,1), (length(ratios[1,])/5))
+  strucvec <- rep(params$struc_vec,
+                  (length(ratios[1,])/5))
   X <- matrix(strucvec, ncol=3, byrow=T)
   
   multiplefit <- lm(t(ratios)~X)
@@ -103,7 +126,9 @@ ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
   if (!is.null(nclus)){
     message("computing covariance of coefficients... [parallel]")
     
-    mstats <- data.frame(parfunct(ratios, nclus=nclus))
+    mstats <- data.frame(
+      parfunct(ratios, nclus=nclus)
+      )
     colnames(mstats)[ncol(mstats)] <- "R2"
     rsquared <- mstats$R2
     covB <- mstats[,-ncol(mstats)]
