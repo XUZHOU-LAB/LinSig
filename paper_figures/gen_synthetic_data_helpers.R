@@ -3,8 +3,8 @@ library(MASS)
 source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R")
 
 
-generate_synthetic_data <- function(sourcedf, size=20000, nrep=2){
-  normed <- MedianNorm(sourcedf[rowMeans(sourcedf)>10,]) # filter out low counts
+generate_synthetic_data <- function(source_df, size=20000, nrep=2){
+  normed <- MedianNorm(source_df[rowMeans(source_df)>10,]) # filter out low counts
   
   col_ctrl <- 1:nrep + 0*nrep # col 1,2 if 2 replicates
   col_condA <- 1:nrep + 1*nrep # col 3,4 if 2 replicates
