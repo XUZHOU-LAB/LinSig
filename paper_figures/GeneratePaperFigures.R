@@ -12,22 +12,25 @@
 library(dplyr)
 library(MASS)
 library(cellsigsyn)
+library(parallel)
+library(ggplot2)
 source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
 source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
 source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
-library(parallel)
+source("~/Boston Internship/cellsigsyn/R/fit_model.R")
+
+cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
 
 ### PARAMETERS ###
 params <- new.env(parent = emptyenv())
-params$struc_vec <- c(0,1,0, # 
-                      0,1,1, #
-                      1,0,0, #
-                      1,0,1, #
-                      1,1,1) #
-
-strucDF <- list(
+params$struc_vec <- c(0,1,0, # Only A
+                      0,1,1, # A + A:B
+                      1,0,0, # Only B
+                      1,0,1, # B + A:B
+                      1,1,1) # A + B + A:B
+params$strucDF <- data.frame(
   col_ctrl = c(1, 2),      # Columns for CTRL (e.g., replicates 1 and 2)
   col_condA = c(3, 4),     # Columns for Condition A (e.g., replicates 3 and 4)
   col_condB = c(5, 6),     # Columns for Condition B (e.g., replicates 5 and 6)
@@ -35,8 +38,9 @@ strucDF <- list(
 )
 
 
-cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
+###################################################################
+## Old method with a lot of repetition
 rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
 rdf2 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 rdf3 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
@@ -49,17 +53,19 @@ rdf9 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 rdf0 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 
 
-# add ground truth counts
+## add ground truth counts
 
 #scaling factor for different Betas
-logFoldChangesFactor <- log2(c(1.5,1.625,1.75,1.875,2,2.125,2.25,2.375,2.5,2.625,2.75,2.875,3,3.125,3.25))
-#logFoldChangesFactor2_3.25 <- log2(c(2,2,2.125,2.25,2,2.125,2.25,2.375,2.5,2.625,2.75,2.875,3,3.125,3.25))
-
-logFoldChangesFactor2 <- c(logFoldChangesFactor, logFoldChangesFactor)
+logFCs <- log2(seq(1.5, 3.25, by = 0.125)) # 15 grades of LFC ranging from 1.5 - 3.25
+logFCs_all <- rep(logFCs, 2) # once for positive regulation and once for negative regulation
 
 # simulate logic: A + A:B. In total 6000 ground truth genes
-groundTruthScalingFactor <- matrix(rbind(matrix(rep(c(0,0,1,1,0,0,0,0),3000), ncol=8,byrow=T),
-                      matrix(rep(c(0,0,-1,-1,0,0,0,0),3000), ncol=8, byrow=T)),ncol=8) * rep(logFoldChangesFactor2, 200)
+groundTruthScalingFactor <- matrix(
+  rbind(
+    matrix(rep(c(0,0,1,1,0,0,0,0),3000), ncol=8,byrow=T),
+    matrix(rep(c(0,0,-1,-1,0,0,0,0),3000), ncol=8, byrow=T)
+    ),
+  ncol=8) * rep(logFoldChangesFactor2, 200)
 
 
 emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
@@ -90,25 +96,68 @@ rownames(sig2rep2v7) <- as.character(1:nrow(sig2rep2v7))
 rownames(sig2rep2v8) <- as.character(1:nrow(sig2rep2v8))
 rownames(sig2rep2v9) <- as.character(1:nrow(sig2rep2v9))
 
-write.csv(sig2rep2v0, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf0_2sig_2rep.csv")
-write.csv(sig2rep2v1, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf1_2sig_2rep.csv")
-write.csv(sig2rep2v2, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf2_2sig_2rep.csv")
-write.csv(sig2rep2v3, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf3_2sig_2rep.csv")
-write.csv(sig2rep2v4, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf4_2sig_2rep.csv")
-write.csv(sig2rep2v5, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf5_2sig_2rep.csv")
-write.csv(sig2rep2v6, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf6_2sig_2rep.csv")
-write.csv(sig2rep2v7, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf7_2sig_2rep.csv")
-write.csv(sig2rep2v8, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf8_2sig_2rep.csv")
-write.csv(sig2rep2v9, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf9_2sig_2rep.csv")
-
-sampledRows <- as.character(sampledRows)
-write(sampledRows, "sampledRows.txt") # vector with row names of ground truth genes
 
 #all ground truth genes:
-head(sig2rep2v0[sampledRows,])
+#head(sig2rep2v0[sampledRows,])
 
 all10DFs <- list(sig2rep2v0,sig2rep2v1,sig2rep2v2,sig2rep2v3,sig2rep2v4,
               sig2rep2v5,sig2rep2v6,sig2rep2v7,sig2rep2v8,sig2rep2v9)
+
+
+###################################################################
+
+#test ChatGPT refactor:
+# Generate multiple synthetic datasets
+generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_datasets = 10) {
+  replicate(n_datasets, generate_synthetic_data(source_df = source_df, nrep = nrep, size = size), simplify = FALSE)
+}
+
+# Create ground truth scaling matrix
+create_ground_truth_scaling <- function(logFCs, n_genes_per_group = 3000) {
+  logFCs_all <- rep(logFCs, 2)  # length = 2 × length(logFCs)
+  # Repeat the AB pattern 3000 times for positive and negative effects
+  scaling_AB_pos <- matrix(rep(c(0, 0, 1, 1, 0, 0, 0, 0), n_genes_per_group), ncol = 8, byrow = TRUE)
+  scaling_AB_neg <- matrix(rep(c(0, 0, -1, -1, 0, 0, 0, 0), n_genes_per_group), ncol = 8, byrow = TRUE)
+    design_matrix <- rbind(scaling_AB_pos, scaling_AB_neg)  # 6000 × 8
+    ground_truth_scaling_matrix <- design_matrix * logFCs_all
+  
+  return(ground_truth_scaling_matrix)
+}
+
+# Apply ground truth scaling to datasets
+apply_ground_truth <- function(datasets, ground_truth_scaling, total_genes = 40000, signal_genes = 6000) {
+  empty_matrix <- matrix(0, nrow = total_genes, ncol = 8)
+  sampled_rows <- sample(1:total_genes, signal_genes)
+  print(dim(ground_truth_scaling))         # Should be 6000 x 8
+  print(length(sampled_rows)    )           # Should be 6000
+  empty_matrix[sampled_rows, ] <- ground_truth_scaling
+  
+  # Apply scaling to each dataset
+  scaled_datasets <- lapply(datasets, function(df) {
+    scaled_df <- 2^empty_matrix * df
+    rownames(scaled_df) <- as.character(1:nrow(scaled_df))
+    return(scaled_df)
+  })
+  
+  list(datasets = scaled_datasets, sampled_rows = as.character(sampled_rows))
+}
+
+# Main execution
+logFCs <- log2(seq(1.5, 3.25, by = 0.125))
+logFCs_all <- rep(logFCs, 2)
+
+datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = 40000)
+ground_truth <- create_ground_truth_scaling(logFCs_all)
+ground_truth_datasets <- apply_ground_truth(datasets, ground_truth)
+
+# Access outputs
+ground_truth_datasets$datasets
+ground_truth_datasets$sampled_rows
+
+all10DFs <- ground_truth_datasets$datasets
+##################################################################
+
+# TODO: compare old vs new method?
 
 
 ###########################################
@@ -116,18 +165,18 @@ all10DFs <- list(sig2rep2v0,sig2rep2v1,sig2rep2v2,sig2rep2v3,sig2rep2v4,
 ###########################################
 
 
-########################################
 ##### A N A L Y S E    L I N S I G #####
-########################################
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation. Takes a long time though for each df...
-compute_lfc_thresholds(sig2rep2v1,nrep=2, size=100000, nclus=7, lowessn=0)
+compute_lfc_thresholds(sig2rep2v3,nrep=2, size=100000, nclus=7, lowessn=0)
+
+
 
 for (i in 1:10){
   randomDataFrame <- all10DFs[[i]]
   GTnorm <- MedianNorm(randomDataFrame)
-  GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = strucDF)
+  GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = params$strucDF)
   GTstat <- ratios.fit(GTratios, CompThreshold = 1)
   
   o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3)>0.773)#, na.rm=T)
@@ -162,10 +211,7 @@ for (i in 1:10){
   LinSigStats[[i]] <- list(FDRv, SENv, sensLFCdf)
 }
 
-########################################
 ##### A N A L Y S E     L I M M A  #####
-########################################
-
 library(limma)
 library(edgeR)
 cond <- c("ctrl", "LPS", "pH", "LPSpH")
@@ -219,11 +265,8 @@ for (i in 1:10){
 
 
 
-########################################
 ##### A N A L Y S E    D E S E Q 2 #####
-########################################
-
-#library(DESeq2)
+library(DESeq2)
 metadata <- data.frame("condition"=c("Ctrl", "Ctrl", "Ctrl", "Ctrl", "Trt", "Trt", "Trt", "Trt"), 
                        "genotype"=c("WT", "WT", "MU", "MU", "WT","WT", "MU", "MU"))
 rownames(metadata) <- colnames(sig2rep2v0)
@@ -326,7 +369,7 @@ write.csv(allfdrsens, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPa
 ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   geom_point(aes(shape=term), size=2)+
   scale_shape_manual(values=c(21, 22, 24)) +
-  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.7,0.99))+
+  coord_cartesian(ylim=c(0.092,0.99), xlim=c(0.07,0.99))+
   xlab("Sensitivity") +
   stat_ellipse(geom="polygon", level=0.95, aes(fill=method), alpha=0.25)
 
@@ -349,7 +392,7 @@ ggplot(data=allSensVarLFC[allSensVarLFC$beta>0,], aes(x=beta, y=rate, group=inte
   geom_smooth(method="loess",se=T, span=0.7, aes(fill=method), alpha=0.3)+
   ylab("Sensitivity")+
   xlab("fold change") +
-  coord_cartesian(ylim=c(0.4, 1))
+  coord_cartesian(ylim=c(0.0, 1))
 
 #write.csv(allSensVarLFC, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/SENS_LFC_plotdata_variableLFC1.5_4.csv")
 allSensVarLFC <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/SENS_LFC_plotdata_variableLFC1.5_4.csv")

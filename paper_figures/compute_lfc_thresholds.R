@@ -43,6 +43,8 @@ parfunct <- function(ratios, nclus){ # parallel_lm_function
   return(t(mstats))
 }
 
+
+# TODO: refactor (+ parfunct function)
 ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
   strucvec <- rep(params$struc_vec,
                   (length(ratios[1,])/5))
@@ -146,15 +148,15 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
 
   
   # Compute FDR curves
-  FDRa  <- compute_fdr(FDRA,  "X1", thresholds)
-  FDRb  <- compute_fdr(FDRB,  "X2", thresholds)
-  FDRab <- compute_fdr(FDRAB, "X3", thresholds)
+  FDRa  <- compute_fdr(FDRA,  "X1", params$x_axis_thresholds)
+  FDRb  <- compute_fdr(FDRB,  "X2", params$x_axis_thresholds)
+  FDRab <- compute_fdr(FDRAB, "X3", params$x_axis_thresholds)
   
   # Plot all
-  plot(thresholds, FDRab, log = "x", type = "l", col = "green", lwd = 1.5,
+  plot(params$x_axis_thresholds, FDRab, log = "x", type = "l", col = "green", lwd = 1.5,
        xlim = c(0.001, 2), ylim = c(0, 0.99), ylab = "FDR", xlab = "LFC Threshold")
-  lines(thresholds, FDRb,  col = "orange", lwd = 1.5)
-  lines(thresholds, FDRa,  col = "blue",   lwd = 1.5)
+  lines(params$x_axis_thresholds, FDRb,  col = "orange", lwd = 1.5)
+  lines(params$x_axis_thresholds, FDRa,  col = "blue",   lwd = 1.5)
   abline(h = 0.05, col = "red", lwd = 2, lty = 2)
   legend("topright", legend = c("A", "B", "AB"), col = c("blue", "orange", "green"), lwd = 2)
   
@@ -178,10 +180,10 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
   )
   
   # Print summary table
-  print("\n")
-  return(print(summary_table, row.names = FALSE))
+  return(summary_table, row.names = FALSE)
 }
 
-cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
-compute_lfc_thresholds(source_df = cts, nrep=2)
+#test function
+#cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
+#compute_lfc_thresholds(source_df = cts, nrep=2)
