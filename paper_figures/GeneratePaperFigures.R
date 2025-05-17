@@ -12,8 +12,9 @@
 library(dplyr)
 library(MASS)
 library(cellsigsyn)
-source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R")
+source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
+source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
 library(parallel)
 
 
@@ -25,7 +26,16 @@ params$struc_vec <- c(0,1,0, #
                       1,0,1, #
                       1,1,1) #
 
+strucDF <- list(
+  col_ctrl = c(1, 2),      # Columns for CTRL (e.g., replicates 1 and 2)
+  col_condA = c(3, 4),     # Columns for Condition A (e.g., replicates 3 and 4)
+  col_condB = c(5, 6),     # Columns for Condition B (e.g., replicates 5 and 6)
+  col_condAB = c(7, 8)     # Columns for Condition AB (e.g., replicates 7 and 8)
+)
 
+compute_ratios(df, 
+               pseudo=1,
+               structuredDataFrame=strucDF)
 
 compute_ratiosR <- function(df, 
                             nreps, 
@@ -164,6 +174,19 @@ gen_randomstats <- function(sourcedf, size=20000, nrep=2, lowessn=0, onlyDF=0,nc
   normedR <- MedianNorm(gtt)
   #compute ratios
   rats <- compute_ratiosR(normedR, nreps=nrep, lowess_norm=lowessn)
+  
+  strucDF <- list(
+    col_ctrl = c(1, 2),      # Columns for CTRL (e.g., replicates 1 and 2)
+    col_condA = c(3, 4),     # Columns for Condition A (e.g., replicates 3 and 4)
+    col_condB = c(5, 6),     # Columns for Condition B (e.g., replicates 5 and 6)
+    col_condAB = c(7, 8)     # Columns for Condition AB (e.g., replicates 7 and 8)
+  )
+  rats_test <- compute_ratios(normedR, strucDF)
+  
+  # TODO: to test:
+  rats == rats_test
+  
+  
   #fit model
   stats <- ratios.fitR(rats, CompThreshold=1,n_rep=nrep, nclus=nclus)
   
