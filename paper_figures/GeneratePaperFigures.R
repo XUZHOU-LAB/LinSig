@@ -15,6 +15,7 @@ library(cellsigsyn)
 source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
 source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
+source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
 library(parallel)
 
 
@@ -33,233 +34,20 @@ strucDF <- list(
   col_condAB = c(7, 8)     # Columns for Condition AB (e.g., replicates 7 and 8)
 )
 
-compute_ratios(df, 
-               pseudo=1,
-               structuredDataFrame=strucDF)
-
-# compute_ratiosR <- function(df, 
-#                             nreps, 
-#                             pseudo_count=1, # default 1
-#                             lowess_norm=FALSE # default off
-#                             ){
-#   
-#   # Assume first 2 columns are for CTRL, next 2 for Condition A, next 2 for Condition B etc. (for 2 replicates)
-#   col_ctrl <- 1:nreps + 0*nreps # col 1,2 if 2 replicates
-#   col_condA <- 1:nreps + 1*nreps # col 3,4 if 2 replicates
-#   col_condB <- 1:nreps + 2*nreps  # col 5,6 if 2 replicates
-#   col_condAB <- 1:nreps + 3*nreps  # col 7,8 if 2 replicates
-#   
-#   dfPseudo <- df + pseudo_count # add pseudo count to dataset
-# 
-#   LogRatios <- matrix(nrow=nrow(dfPseudo), ncol=nreps*5) # initialize empty matrix
-#   LogIntensity <- matrix(nrow=nrow(dfPseudo), ncol=nreps*5) # initialize empty matrix
-#   
-#   
-#   # Compute log ratios
-#   print("computing log ratios")
-#   for (i in 1:nreps){
-#     LogRatios[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] / dfPseudo[, col_ctrl[i]])
-#     LogRatios[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condB[i]])
-#     LogRatios[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] / dfPseudo[, col_ctrl[i]])
-#     LogRatios[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condA[i]])
-#     LogRatios[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_ctrl[i]])
-#     
-#     LogIntensity[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] * dfPseudo[, col_ctrl[i]])
-#     LogIntensity[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condB[i]])
-#     LogIntensity[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] * dfPseudo[, col_ctrl[i]])
-#     LogIntensity[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condA[i]])
-#     LogIntensity[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_ctrl[i]])
-#   }
-#   n_ratios <- nrow(LogRatios)
-#   
-#   
-#   if (!lowess_norm) { # skip ahead if no Lowess normalization
-#     rownames(LogRatios) <- rownames(df)
-#     return(LogRatios)
-#   }
-#   
-#   print("Performing LOWESS normalization...")
-#   Ratios <- matrix(nrow = nrow(LogRatios), ncol = ncol(LogRatios))
-#   #colnames(Ratios) <- col_names
-#   pb <- txtProgressBar(min = 0, max = ncol(LogRatios), style = 3)
-#   
-#   for (i in 1:ncol(LogRatios)) {
-#     Ratios[, i] <- RNAseqLowess(LogIntensity[, i], LogRatios[, i])
-#     setTxtProgressBar(pb, i)
-#   }
-#   close(pb)
-#   
-#   rownames(Ratios) <- rownames(df)
-#   return(Ratios)
-# }
-
-
-parfunct <- function(ratios, nclus){ # parallel_lm_function
-  clust <- makeCluster(nclus)
-  
-  strucvec <- rep(params$struc_vec, # replicate structural matrix for each replicate
-                  (length(ratios[1,])/5))
-  
-  X <- matrix(strucvec, ncol=3, byrow=T)
-  clusterExport(clust, "X", envir=environment())
-  mstats <- parApply(clust, ratios, 1, function(x){
-    r<- summary(lm(x ~ X))$r.squared
-    cov<- diag(vcov(lm(x ~ X)))
-    return(c(cov,r))
-  })
-  stopCluster(clust)
-  return(t(mstats))
-}
-
-ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
-  strucvec <- rep(params$struc_vec,
-                  (length(ratios[1,])/5))
-  X <- matrix(strucvec, ncol=3, byrow=T)
-  
-  multiplefit <- lm(t(ratios)~X)
-  msums <- summary(multiplefit)
-  B <- t(multiplefit$coefficients)
-  
-  rsquared <- vector(length = length(msums))
-  ngen <- length(msums)
-  covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen),
-                     cov_x2=double(ngen), cov_x3=double(ngen))
-  
-  if (is.null(nclus)){
-    message("computing covariance of coefficients for random dataset...")
-    pb <- txtProgressBar(min = 0, max = length(msums), initial = 0, char = "=", style = 3)
-    for (i in 1:length(msums)){
-      rsquared[i] <- msums[[i]]$r.squared
-      covB[i,] <- diag(vcov(lm(ratios[i,]~X)))
-      setTxtProgressBar(pb,i)
-    }
-  }
-  
-  if (!is.null(nclus)){
-    message("computing covariance of coefficients... [parallel]")
-    
-    mstats <- data.frame(
-      parfunct(ratios, nclus=nclus)
-      )
-    colnames(mstats)[ncol(mstats)] <- "R2"
-    rsquared <- mstats$R2
-    covB <- mstats[,-ncol(mstats)]
-  }
-  
-  n_samples <- 4*n_rep
-  n_var <- 3
-  DoF <- n_samples - n_var - 1
-  ttest_stat <- (abs(B) - log2(CompThreshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
-  ttest_stat <- data.frame(ttest_stat)
-  
-  Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
-  
-  Datafit = B %*% t(cbind(rep(1,10), X)) #matrix multiplication to fit model
-  Residual = ratios - Datafit
-  Expression_variation = rowMeans(ratios^2)
-  Expression_residual = rowMeans(Residual^2)
-  Varexplain = 100*(Expression_variation - Expression_residual) / Expression_variation
-  
-  Fit <- data.frame(Expression_variation, Varexplain)
-  outputdf <- data.frame(cbind(B,Pvalue,rsquared))
-  colnames(outputdf)[9] <- "R2"
-  return(outputdf)
-}
-
-gen_randomstats <- function(source_df, size=20000, nrep=2, lowessn=0, onlyDF=0,nclus=NULL){
-  
-  gtt <- generate_synthetic_data(source_df=source_df, size=size, nrep=2)
-  
-  #median normalization
-  normedR <- MedianNorm(gtt)
-  
-  #compute ratios
-  #rats <- compute_ratiosR(normedR, nreps=nrep, lowess_norm=lowessn)
-  strucDF <- list(
-    col_ctrl = c(1, 2),      # Columns for CTRL (e.g., replicates 1 and 2)
-    col_condA = c(3, 4),     # Columns for Condition A (e.g., replicates 3 and 4)
-    col_condB = c(5, 6),     # Columns for Condition B (e.g., replicates 5 and 6)
-    col_condAB = c(7, 8)     # Columns for Condition AB (e.g., replicates 7 and 8)
-  )
-
-  rats<- compute_ratios(normedR, pseudo=1, structureDataFrame=strucDF)
-  
-  
-  #fit model
-  stats <- ratios.fitR(rats, CompThreshold=1,n_rep=nrep, nclus=nclus)
-  
-  # Flag significant hits for A, B, and AB based on p-value and R²
-  stats$SIGA  <- stats[, 6] < 0.05 & stats$R2 > 0.8
-  stats$SIGB  <- stats[, 7] < 0.05 & stats$R2 > 0.8
-  stats$SIGAB <- stats[, 8] < 0.05 & stats$R2 > 0.8
-  
-  # Subset significant rows
-  FDRA  <- stats[stats$SIGA, ]
-  FDRB  <- stats[stats$SIGB, ]
-  FDRAB <- stats[stats$SIGAB, ]
-  
-  # Define thresholds
-  thresholds <- seq(0.001, 4.001, 0.001)
-  
-  # Helper to compute FDR for a given column
-  compute_fdr <- function(df, column, thresholds) {
-    sapply(thresholds, function(t) mean(abs(df[[column]]) > t))
-  }
-  
-  # Compute FDR curves
-  FDRa  <- compute_fdr(FDRA,  "X1", thresholds)
-  FDRb  <- compute_fdr(FDRB,  "X2", thresholds)
-  FDRab <- compute_fdr(FDRAB, "X3", thresholds)
-  
-  # Plot all
-  plot(thresholds, FDRab, log = "x", type = "l", col = "green", lwd = 1.5,
-       xlim = c(0.001, 2), ylim = c(0, 0.99), ylab = "FDR", xlab = "Effect Size Threshold")
-  lines(thresholds, FDRb,  col = "orange", lwd = 1.5)
-  lines(thresholds, FDRa,  col = "blue",   lwd = 1.5)
-  abline(h = 0.05, col = "red", lwd = 2, lty = 2)
-  legend("topright", legend = c("A", "B", "AB"), col = c("blue", "orange", "green"), lwd = 2)
-  
-  
-  Xs <- seq(0, 4, 0.001)
-  FDRDF <- data.frame(Xs = Xs, FDRa = FDRa, FDRb = FDRb, FDRab = FDRab)
-  
-  # Helper to extract threshold for closest FDR to target
-  get_threshold <- function(FDR_values, target) {
-    Xs[which.min(abs(FDR_values - target))]
-  }
-  
-
-  # Create summary data
-  summary_table <- data.frame(
-    Condition          = c("A", "B", "AB"),
-    Significant_genes   = c(nrow(FDRA), nrow(FDRB), nrow(FDRAB)),
-    Threshold_at_5pct  = c(get_threshold(FDRa, 0.05),
-                           get_threshold(FDRb, 0.05),
-                           get_threshold(FDRab, 0.05)),
-    Threshold_at_10pct = c(get_threshold(FDRa, 0.10),
-                           get_threshold(FDRb, 0.10),
-                           get_threshold(FDRab, 0.10))
-  )
-  
-  # Print summary table
-  print("\n")
-  return(print(summary_table, row.names = FALSE))
-}
 
 cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
-gen_randomstats(source_df = cts, nrep=2)
-
 rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf2 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf3 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf4 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf5 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf6 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf7 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf8 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf9 <- generate_synthetic_data(cts,nrep=2, size=40000)
-rdf0 <- generate_synthetic_data(cts,nrep=2, size=40000)
+rdf2 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf3 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf4 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf5 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf6 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf7 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf8 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf9 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf0 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+
 
 # add ground truth counts
 
@@ -334,15 +122,12 @@ all10DFs <- list(sig2rep2v0,sig2rep2v1,sig2rep2v2,sig2rep2v3,sig2rep2v4,
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation. Takes a long time though for each df...
-gen_randomstats(sig2rep2v1,nrep=2, size=100000, nclus=7, lowessn=0)
+compute_lfc_thresholds(sig2rep2v1,nrep=2, size=100000, nclus=7, lowessn=0)
 
 for (i in 1:10){
   randomDataFrame <- all10DFs[[i]]
   GTnorm <- MedianNorm(randomDataFrame)
-  GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = data.frame(col_ctrl=c(1,2),
-                                                                                 col_condA=c(3,4),
-                                                                                 col_condB=c(5,6),
-                                                                                 col_condAB=c(7,8)))
+  GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = strucDF)
   GTstat <- ratios.fit(GTratios, CompThreshold = 1)
   
   o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3)>0.773)#, na.rm=T)
@@ -589,16 +374,16 @@ ABAB<-c(0,0,f,f,f,f,f,f)
 
 cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
-rdf1 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf2 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf3 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf4 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf5 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf6 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf7 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf8 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf9 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
-rdf0 <- gen_randomstats(cts,nrep=2, size=40000, onlyDF=1)
+rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf2 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf3 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf4 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf5 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf6 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf7 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf8 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf9 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf0 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 
 GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
 sampledRows <- sample(2000:40000, 5250)
