@@ -12,6 +12,8 @@
 library(dplyr)
 library(MASS)
 library(cellsigsyn)
+source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R")
+source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
 library(parallel)
 
 
@@ -39,8 +41,8 @@ compute_ratiosR <- function(df,
   
   dfPseudo <- df + pseudo_count # add pseudo count to dataset
 
-  LogRatios <- matrix(nrow=length(dfPseudo[,1]), ncol=nreps*5) # initialize empty matrix
-  LogIntensity <- matrix(nrow=length(dfPseudo[,1]), ncol=nreps*5) # initialize empty matrix
+  LogRatios <- matrix(nrow=nrow(dfPseudo), ncol=nreps*5) # initialize empty matrix
+  LogIntensity <- matrix(nrow=nrow(dfPseudo), ncol=nreps*5) # initialize empty matrix
   
   
   # Compute log ratios
@@ -58,7 +60,7 @@ compute_ratiosR <- function(df,
     LogIntensity[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condA[i]])
     LogIntensity[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_ctrl[i]])
   }
-  n_ratios <- length(LogRatios[1,])
+  n_ratios <- nrow(LogRatios)
   
   
   if (!lowess_norm) { # skip ahead if no Lowess normalization
@@ -71,7 +73,7 @@ compute_ratiosR <- function(df,
   colnames(Ratios) <- col_names
   pb <- txtProgressBar(min = 0, max = ncol(LogRatios), style = 3)
   
-  for (i in seq_len(ncol(LogRatios))) {
+  for (i in 1:ncol(LogRatios)) {
     Ratios[, i] <- RNAseqLowess(LogIntensity[, i], LogRatios[, i])
     setTxtProgressBar(pb, i)
   }
@@ -144,8 +146,8 @@ ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
   
   Datafit = B %*% t(cbind(rep(1,10), X)) #matrix multiplication to fit model
   Residual = ratios - Datafit
-  Expression_variation = rowMeans(ratios**2)
-  Expression_residual = rowMeans(Residual**2)
+  Expression_variation = rowMeans(ratios^2)
+  Expression_residual = rowMeans(Residual^2)
   Varexplain = 100*(Expression_variation - Expression_residual) / Expression_variation
   
   Fit <- data.frame(Expression_variation, Varexplain)
@@ -157,18 +159,10 @@ ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
 gen_randomstats <- function(sourcedf, size=20000, nrep=2, lowessn=0, onlyDF=0,nclus=NULL){
   normed <- MedianNorm(sourcedf[rowMeans(sourcedf)>10,]) # filter out low counts
   
-  message("You will be asked to enter column names for each condition.")
-  message("For replicates, separate the column numbers with a comma. Example: 1,2")
-  
-  ctrl  <- readline("Enter column number(s) for condition ctrl:")
-  condA <- readline("Enter column number(s) for condition A:")
-  condB <- readline("Enter column number(s) for condition B:")
-  condAB<- readline("Enter column number(s) for condition AB:")
-  
-  col_ctrl <- as.numeric(unlist(strsplit(ctrl, ",")))
-  col_condA <- as.numeric(unlist(strsplit(condA, ",")))
-  col_condB <- as.numeric(unlist(strsplit(condB, ",")))
-  col_condAB <- as.numeric(unlist(strsplit(condAB, ",")))
+  col_ctrl <- 1:nrep + 0*nrep # col 1,2 if 2 replicates
+  col_condA <- 1:nrep + 1*nrep # col 3,4 if 2 replicates
+  col_condB <- 1:nrep + 2*nrep  # col 5,6 if 2 replicates
+  col_condAB <- 1:nrep + 3*nrep  # col 7,8 if 2 replicates
   
   mean_per_condition <- matrix(ncol=4,nrow=nrow(normed))
   mean_per_condition[,1] <- rowMeans(normed[,col_ctrl])
@@ -357,7 +351,7 @@ all10DFs <- list(sig2rep2v0,sig2rep2v1,sig2rep2v2,sig2rep2v3,sig2rep2v4,
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation. Takes a long time though for each df...
-gen_randomstats(sig2rep2v,nrep=2, size=100000, nclus=7, lowessn=0)
+gen_randomstats(sig2rep2v1,nrep=2, size=100000, nclus=7, lowessn=0)
 
 for (i in 1:10){
   randomDataFrame <- all10DFs[[i]]
