@@ -19,11 +19,11 @@ library(limma)
 library(edgeR)
 library(DESeq2)
 
-source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
-source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/fit_model.R") # for RNAseqLowess function
 source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
-source("~/Boston Internship/cellsigsyn/R/fit_model.R")
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R")
 
 cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
@@ -101,7 +101,7 @@ all10DFs <- ground_truth_datasets$datasets
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation. Takes a long time though for each df...
-compute_lfc_thresholds(sig2rep2v8,nrep=2, size=100000, lowessn=0)
+compute_lfc_thresholds(sig2rep2v1,nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
   randomDataFrame <- all10DFs[[i]]
