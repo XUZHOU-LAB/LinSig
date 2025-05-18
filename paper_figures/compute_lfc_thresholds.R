@@ -25,81 +25,6 @@ strucDF <- list(
   col_condAB = c(7, 8)     # Columns for Condition AB (e.g., replicates 7 and 8)
 )
 
-
-parfunct <- function(ratios, nclus){ # parallel_lm_function
-  clust <- makeCluster(nclus)
-  
-  strucvec <- rep(params$struc_vec, # replicate structural matrix for each replicate
-                  (length(ratios[1,])/5))
-  
-  X <- matrix(strucvec, ncol=3, byrow=T)
-  clusterExport(clust, "X", envir=environment())
-  mstats <- parApply(clust, ratios, 1, function(x){
-    r<- summary(lm(x ~ X))$r.squared
-    cov<- diag(vcov(lm(x ~ X)))
-    return(c(cov,r))
-  })
-  stopCluster(clust)
-  return(t(mstats))
-}
-
-
-# TODO: refactor (+ parfunct function)
-ratios.fitR <- function(ratios, CompThreshold=1.5, n_rep=2, nclus=NULL){
-  strucvec <- rep(params$struc_vec,
-                  (length(ratios[1,])/5))
-  X <- matrix(strucvec, ncol=3, byrow=T)
-  
-  multiplefit <- lm(t(ratios)~X)
-  msums <- summary(multiplefit)
-  B <- t(multiplefit$coefficients)
-  
-  rsquared <- vector(length = length(msums))
-  ngen <- length(msums)
-  covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen),
-                     cov_x2=double(ngen), cov_x3=double(ngen))
-  
-  if (is.null(nclus)){
-    message("computing covariance of coefficients for random dataset...")
-    pb <- txtProgressBar(min = 0, max = length(msums), initial = 0, char = "=", style = 3)
-    for (i in 1:length(msums)){
-      rsquared[i] <- msums[[i]]$r.squared
-      covB[i,] <- diag(vcov(lm(ratios[i,]~X)))
-      setTxtProgressBar(pb,i)
-    }
-  }
-  
-  if (!is.null(nclus)){
-    message("computing covariance of coefficients... [parallel]")
-    
-    mstats <- data.frame(
-      parfunct(ratios, nclus=nclus)
-    )
-    colnames(mstats)[ncol(mstats)] <- "R2"
-    rsquared <- mstats$R2
-    covB <- mstats[,-ncol(mstats)]
-  }
-  
-  n_samples <- 4*n_rep
-  n_var <- 3
-  DoF <- n_samples - n_var - 1
-  ttest_stat <- (abs(B) - log2(CompThreshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
-  ttest_stat <- data.frame(ttest_stat)
-  
-  Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
-  
-  Datafit = B %*% t(cbind(rep(1,10), X)) #matrix multiplication to fit model
-  Residual = ratios - Datafit
-  Expression_variation = rowMeans(ratios^2)
-  Expression_residual = rowMeans(Residual^2)
-  Varexplain = 100*(Expression_variation - Expression_residual) / Expression_variation
-  
-  Fit <- data.frame(Expression_variation, Varexplain)
-  outputdf <- data.frame(cbind(B,Pvalue,rsquared))
-  colnames(outputdf)[9] <- "R2"
-  return(outputdf)
-}
-
 # Helper function to compute FDR for a given column
 compute_fdr <- function(df, column, thresholds) {
   sapply(thresholds, function(t) mean(abs(df[[column]]) > t))
@@ -112,7 +37,7 @@ get_threshold <- function(FDR_values, target) {
 }
 
 
-compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onlyDF=0,nclus=NULL){
+compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onlyDF=0){
   
   gtt <- generate_synthetic_data(source_df=source_df, size=size, nrep=2)
   
@@ -132,7 +57,7 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
   
   
   #fit model
-  stats <- ratios.fitR(rats, CompThreshold=1,n_rep=nrep, nclus=nclus)
+  stats <- ratios.fit(rats, CompThreshold=1,n_rep=nrep)
   
   # Flag significant hits for A, B, and AB based on p-value and R²
   stats$SIGA  <- stats[, 6] < 0.05 & stats$R2 > 0.8
@@ -180,7 +105,7 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
   )
   
   # Print summary table
-  return(summary_table, row.names = FALSE)
+  return(summary_table)
 }
 
 

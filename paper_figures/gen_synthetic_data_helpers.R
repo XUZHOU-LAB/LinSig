@@ -2,6 +2,10 @@ library(dplyr)
 library(MASS)
 source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R")
 
+# Generate multiple synthetic datasets
+generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_datasets = 10) {
+  replicate(n_datasets, generate_synthetic_data(source_df = source_df, nrep = nrep, size = size), simplify = FALSE)
+}
 
 generate_synthetic_data <- function(source_df, size=20000, nrep=2){
   normed <- MedianNorm(source_df[rowMeans(source_df)>10,]) # filter out low counts

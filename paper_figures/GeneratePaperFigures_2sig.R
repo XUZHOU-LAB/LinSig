@@ -11,9 +11,14 @@
 
 library(dplyr)
 library(MASS)
-library(cellsigsyn)
+#library(cellsigsyn)
 library(parallel)
 library(ggplot2)
+
+library(limma)
+library(edgeR)
+library(DESeq2)
+
 source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
 source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
@@ -42,10 +47,6 @@ params$lfc_reg_recovery_figure <- log2(2)
 
 
 ###################################################################
-# Generate multiple synthetic datasets
-generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_datasets = 10) {
-  replicate(n_datasets, generate_synthetic_data(source_df = source_df, nrep = nrep, size = size), simplify = FALSE)
-}
 
 # Create ground truth scaling matrix
 create_ground_truth_scaling <- function(logFCs, n_genes_per_group = 3000) {
@@ -100,9 +101,7 @@ all10DFs <- ground_truth_datasets$datasets
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation. Takes a long time though for each df...
-compute_lfc_thresholds(sig2rep2v3,nrep=2, size=100000, nclus=7, lowessn=0)
-
-
+compute_lfc_thresholds(sig2rep2v8,nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
   randomDataFrame <- all10DFs[[i]]
@@ -355,16 +354,20 @@ emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
 emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
 
 
+reg_rec_datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = params$n_genes_simulated)
+
+
+
 rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf2 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf3 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf4 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf5 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf6 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf7 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf8 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf9 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf0 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
+rdf2 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf3 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf4 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf5 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf6 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf7 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf8 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf9 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
+rdf0 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
 
 
 
@@ -380,16 +383,6 @@ sig2rep2RR7<-(2^(emptyMatrix)*rdf7)
 sig2rep2RR8<-(2^(emptyMatrix)*rdf8)
 sig2rep2RR9<-(2^(emptyMatrix)*rdf9)
 
-sig2rep2RR0[sig2rep2RR0<0] <-0
-sig2rep2RR1[sig2rep2RR1<0] <-0
-sig2rep2RR2[sig2rep2RR2<0] <-0
-sig2rep2RR3[sig2rep2RR3<0] <-0
-sig2rep2RR4[sig2rep2RR4<0] <-0
-sig2rep2RR5[sig2rep2RR5<0] <-0
-sig2rep2RR6[sig2rep2RR6<0] <-0
-sig2rep2RR7[sig2rep2RR7<0] <-0
-sig2rep2RR8[sig2rep2RR8<0] <-0
-sig2rep2RR9[sig2rep2RR9<0] <-0
 
 rownames(sig2rep2RR0) <- as.character(1:nrow(sig2rep2RR0))
 rownames(sig2rep2RR1) <- as.character(1:nrow(sig2rep2RR1))
@@ -429,11 +422,11 @@ sig2rep2RR9 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSig
 
 sampledRows <- readLines("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/sampledRows_RR.txt")
 
-##### LIMMA #####
-library(limma)
-library(edgeR)
-library(DESeq2)
 
+
+
+
+##### LIMMA #####
 cond <- c("ctrl", "LPS", "pH", "LPSpH")
 stim <- factor(c("ctrl", "ctrl", "LPS", "LPS", "ctrl", "ctrl", "LPS", "LPS"), levels=c("ctrl", "LPS"))
 pH <- factor(c("H","H","H", "H",  "L", "L", "L", "L"), levels=c("H", "L"))
