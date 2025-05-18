@@ -36,77 +36,12 @@ params$strucDF <- data.frame(
   col_condB = c(5, 6),     # Columns for Condition B (e.g., replicates 5 and 6)
   col_condAB = c(7, 8)     # Columns for Condition AB (e.g., replicates 7 and 8)
 )
+params$n_synth_dfs <- 10
+params$n_genes_simulated <- 40000
 
 
 
 ###################################################################
-## Old method with a lot of repetition
-rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf2 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf3 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf4 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf5 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf6 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf7 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf8 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf9 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-rdf0 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
-
-
-## add ground truth counts
-
-#scaling factor for different Betas
-logFCs <- log2(seq(1.5, 3.25, by = 0.125)) # 15 grades of LFC ranging from 1.5 - 3.25
-logFCs_all <- rep(logFCs, 2) # once for positive regulation and once for negative regulation
-
-# simulate logic: A + A:B. In total 6000 ground truth genes
-groundTruthScalingFactor <- matrix(
-  rbind(
-    matrix(rep(c(0,0,1,1,0,0,0,0),3000), ncol=8,byrow=T),
-    matrix(rep(c(0,0,-1,-1,0,0,0,0),3000), ncol=8, byrow=T)
-    ),
-  ncol=8) * rep(logFoldChangesFactor2, 200)
-
-
-emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
-
-sampledRows <- sample(1:40000, 6000) # sample 6000 genes 
-emptyMatrix[sampledRows,] <- groundTruthScalingFactor
-
-# ground truth data set 2 signals, 2 replicates, variable ground truth LFCs
-sig2rep2v0<-(2^(emptyMatrix)*rdf0)
-sig2rep2v1<-(2^(emptyMatrix)*rdf1)
-sig2rep2v2<-(2^(emptyMatrix)*rdf2)
-sig2rep2v3<-(2^(emptyMatrix)*rdf3)
-sig2rep2v4<-(2^(emptyMatrix)*rdf4)
-sig2rep2v5<-(2^(emptyMatrix)*rdf5)
-sig2rep2v6<-(2^(emptyMatrix)*rdf6)
-sig2rep2v7<-(2^(emptyMatrix)*rdf7)
-sig2rep2v8<-(2^(emptyMatrix)*rdf8)
-sig2rep2v9<-(2^(emptyMatrix)*rdf9)
-
-rownames(sig2rep2v0) <- as.character(1:nrow(sig2rep2v0))
-rownames(sig2rep2v1) <- as.character(1:nrow(sig2rep2v1))
-rownames(sig2rep2v2) <- as.character(1:nrow(sig2rep2v2))
-rownames(sig2rep2v3) <- as.character(1:nrow(sig2rep2v3))
-rownames(sig2rep2v4) <- as.character(1:nrow(sig2rep2v4))
-rownames(sig2rep2v5) <- as.character(1:nrow(sig2rep2v5))
-rownames(sig2rep2v6) <- as.character(1:nrow(sig2rep2v6))
-rownames(sig2rep2v7) <- as.character(1:nrow(sig2rep2v7))
-rownames(sig2rep2v8) <- as.character(1:nrow(sig2rep2v8))
-rownames(sig2rep2v9) <- as.character(1:nrow(sig2rep2v9))
-
-
-#all ground truth genes:
-#head(sig2rep2v0[sampledRows,])
-
-all10DFs <- list(sig2rep2v0,sig2rep2v1,sig2rep2v2,sig2rep2v3,sig2rep2v4,
-              sig2rep2v5,sig2rep2v6,sig2rep2v7,sig2rep2v8,sig2rep2v9)
-
-
-###################################################################
-
-#test ChatGPT refactor:
 # Generate multiple synthetic datasets
 generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_datasets = 10) {
   replicate(n_datasets, generate_synthetic_data(source_df = source_df, nrep = nrep, size = size), simplify = FALSE)
@@ -146,15 +81,15 @@ apply_ground_truth <- function(datasets, ground_truth_scaling, total_genes = 400
 logFCs <- log2(seq(1.5, 3.25, by = 0.125))
 logFCs_all <- rep(logFCs, 2)
 
-datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = 40000)
+datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = params$n_genes_simulated)
 ground_truth <- create_ground_truth_scaling(logFCs_all)
 ground_truth_datasets <- apply_ground_truth(datasets, ground_truth)
 
 # Access outputs
-ground_truth_datasets$datasets
-ground_truth_datasets$sampled_rows
-
+sampledRows <- ground_truth_datasets$sampled_rows
 all10DFs <- ground_truth_datasets$datasets
+
+sampledRows
 ##################################################################
 
 # TODO: compare old vs new method?
@@ -173,7 +108,7 @@ compute_lfc_thresholds(sig2rep2v3,nrep=2, size=100000, nclus=7, lowessn=0)
 
 
 
-for (i in 1:10){
+for (i in 1:params$n_synth_dfs){
   randomDataFrame <- all10DFs[[i]]
   GTnorm <- MedianNorm(randomDataFrame)
   GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = params$strucDF)
@@ -225,7 +160,7 @@ cont.matrix <- cbind(HvsLinctrl=c(0,0,1,0),
                      Diff=c(0,0,0,1))
 
 limmaStats <- list()
-for (i in 1:10){
+for (i in 1:params$n_synth_dfs){
   randomDataFrame <- all10DFs[[i]]
   dge <- DGEList(counts=randomDataFrame)
   dge<- calcNormFactors(dge)
@@ -272,7 +207,7 @@ metadata <- data.frame("condition"=c("Ctrl", "Ctrl", "Ctrl", "Ctrl", "Trt", "Trt
 rownames(metadata) <- colnames(sig2rep2v0)
 
 deseq2Stats <- list()
-for (i in 1:10){
+for (i in 1:params$n_synth_dfs){
   randomDataFrame <- all10DFs[[i]]
   
   ddsr <-  DESeqDataSetFromMatrix(round(randomDataFrame), colData=metadata, design =~ genotype + condition + genotype:condition)
@@ -369,7 +304,7 @@ write.csv(allfdrsens, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPa
 ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   geom_point(aes(shape=term), size=2)+
   scale_shape_manual(values=c(21, 22, 24)) +
-  coord_cartesian(ylim=c(0.092,0.99), xlim=c(0.07,0.99))+
+  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.7,0.99))+
   xlab("Sensitivity") +
   stat_ellipse(geom="polygon", level=0.95, aes(fill=method), alpha=0.25)
 
