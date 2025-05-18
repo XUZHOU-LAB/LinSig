@@ -38,7 +38,7 @@ params$strucDF <- data.frame(
 )
 params$n_synth_dfs <- 10
 params$n_genes_simulated <- 40000
-
+params$lfc_reg_recovery_figure <- log2(2)
 
 
 ###################################################################
@@ -89,10 +89,6 @@ ground_truth_datasets <- apply_ground_truth(datasets, ground_truth)
 sampledRows <- ground_truth_datasets$sampled_rows
 all10DFs <- ground_truth_datasets$datasets
 
-sampledRows
-##################################################################
-
-# TODO: compare old vs new method?
 
 
 ###########################################
@@ -341,7 +337,8 @@ allSensVarLFC <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinS
 #dataframe with all types of regulation.
 #For each regulation compute the number of wrong logic/no logic/right logic?
 
-f=log2(2)
+f=params$lfc_reg_recovery_figure
+
 A <-  c(0,0,f,f,0,0,f,f)
 B <-  c(0,0,0,0,f,f,f,f)
 AB<-  c(0,0,0,0,0,0,f,f)
@@ -350,7 +347,13 @@ AAB<- c(0,0,f,f,0,0,0,0)
 BAB<- c(0,0,0,0,f,f,0,0)
 ABAB<-c(0,0,f,f,f,f,f,f)
 
-cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
+
+GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
+sampledRows <- sample(2000:40000, 5250)
+
+emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
+emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
+
 
 rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
 rdf2 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
@@ -363,11 +366,7 @@ rdf8 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 rdf9 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 rdf0 <- generate_synthetic_data(source_df = cts,nrep=2, size=40000)
 
-GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
-sampledRows <- sample(2000:40000, 5250)
 
-emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
-emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
 
 # ground truth data set 2 signals, 2 replicates, variable ground truth LFCs
 sig2rep2RR0<-(2^(emptyMatrix)*rdf0) # RR for Regulation Recovery
