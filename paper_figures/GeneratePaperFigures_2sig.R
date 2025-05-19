@@ -100,7 +100,7 @@ all10DFs <- ground_truth_datasets$datasets
 ##### A N A L Y S E    L I N S I G #####
 LinSigStats <- list()
 
-# compute recommended thresholds -> later replace with FDR<0.05 calculation. Takes a long time though for each df...
+# compute recommended thresholds -> later replace with FDR<0.05 calculation.
 compute_lfc_thresholds(sig2rep2v1,nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
@@ -109,12 +109,16 @@ for (i in 1:params$n_synth_dfs){
   GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = params$strucDF)
   GTstat <- ratios.fit(GTratios, CompThreshold = 1)
   
-  o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3)>0.773)#, na.rm=T)
-  o4s<- (GTstat[sampledRows,]$cov_x3<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X3)>0.773)#, na.rm=T)
-  o3 <- (GTstat$cov_x2<0.05 & GTstat$R2>0.8 & abs(GTstat$X2)>0.552)#, na.rm=T)
-  o3s<- (GTstat[sampledRows,]$cov_x2<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X2)>0.552)#, na.rm=T)
-  #o2 <- (GTstat$cov_x1<0.05 & GTstat$R2>0.8 & abs(GTstat$X1)>0.549)#, na.rm=T)
-  #o2s<- (GTstat[sampledRows,]$cov_x1<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X1)>0.549)#, na.rm=T)
+  lfc_thresholds <- compute_lfc_thresholds(randomDataFrame,nrep=2, size=100000, lowessn=0)
+
+  interaction_threshold <- lfc_thresholds["AB",]$Threshold_at_5pct
+  main_threshold <- lfc_thresholds["B",]$Threshold_at_5pct
+  
+  o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3) > interaction_threshold)#, na.rm=T)
+  o4s<- (GTstat[sampledRows,]$cov_x3<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X3)>interaction_threshold)#, na.rm=T)
+  o3 <- (GTstat$cov_x2<0.05 & GTstat$R2>0.8 & abs(GTstat$X2) >  main_threshold)#, na.rm=T)
+  o3s<- (GTstat[sampledRows,]$cov_x2<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X2)>main_threshold)#, na.rm=T)
+
   
   FDRv <- data.frame("FDR" = c((sum(o4, na.rm=T)-sum(o4s, na.rm=T))/sum(o4, na.rm=T),
                                (sum(o3, na.rm=T)-sum(o3s, na.rm=T))/sum(o3, na.rm=T)),
@@ -138,7 +142,7 @@ for (i in 1:params$n_synth_dfs){
                           "beta" = rep(logFoldChangesFactor2, 2),
                           "rep" = i)
   
-  LinSigStats[[i]] <- list(FDRv, SENv, sensLFCdf)
+  LinSigStats[[i]] <- list(fdr_df=FDRv, sen_df=SENv, sen_lfc_df=sensLFCdf)
 }
 
 ##### A N A L Y S E     L I M M A  #####
@@ -163,10 +167,13 @@ for (i in 1:params$n_synth_dfs){
   fit <- lmFit(v, design)
   fit <- eBayes(fit)
   
-  l4 <- (topTable(fit, number=Inf,coef=4)$adj.P.Val<0.05)   # over whole dataset
-  l4s<- (topTable(fit, number=Inf,coef=4)[sampledRows,]$adj.P.Val<0.05) # over just ground truth
-  l2 <- (topTable(fit, number=Inf,coef=2)$adj.P.Val<0.05)
-  l2s<- (topTable(fit, number=Inf,coef=2)[sampledRows,]$adj.P.Val<0.05)
+  int_effect <- topTable(fit, number=Inf,coef=4)
+  main_effect <- topTable(fit, number=Inf,coef=2)
+  
+  l4 <- int_effect$adj.P.Val<0.05   # over whole dataset
+  l4s<- int_effect[sampledRows,]$adj.P.Val<0.05 # over just ground truth
+  l2 <- main_effect$adj.P.Val<0.05
+  l2s<- main_effect[sampledRows,]$adj.P.Val<0.05
   
   FDRv <- data.frame("FDR" = c((sum(l4, na.rm=T)-sum(l4s, na.rm=T))/sum(l4, na.rm=T),
                                (sum(l2, na.rm=T)-sum(l2s, na.rm=T))/sum(l2, na.rm=T)),
@@ -179,10 +186,10 @@ for (i in 1:params$n_synth_dfs){
   
   SR <- c()
   for (j in 1:30){
-    SR <- append(SR, (sum(topTable(fit, number=Inf,coef=4)[sampledRows[30*0:199+j],]$adj.P.Val<0.05)/200))
+    SR <- append(SR, (sum(int_effect[sampledRows[30*0:199+j],]$adj.P.Val<0.05)/200))
   }
   for (j in 1:30){
-    SR <- append(SR, (sum(topTable(fit, number=Inf,coef=2)[sampledRows[30*0:199+j],]$adj.P.Val<0.05)/200))
+    SR <- append(SR, (sum(main_effect[sampledRows[30*0:199+j],]$adj.P.Val<0.05)/200))
   }
   
   sensLFCdf <- data.frame("rate"=SR,
@@ -190,7 +197,7 @@ for (i in 1:params$n_synth_dfs){
                           "term" = rep(c("int", "main"), each=30),
                           "beta" = rep(logFoldChangesFactor2, 2),
                           "rep" = i)
-  limmaStats[[i]] <- list(FDRv, SENv, sensLFCdf)
+  limmaStats[[i]] <- list(fdr_df=FDRv, sen_df=SENv, sen_lfc_df=sensLFCdf)
 }
 
 
@@ -249,53 +256,41 @@ for (i in 1:params$n_synth_dfs){
                           "beta" = rep(logFoldChangesFactor2, 2),
                           "rep" = i)
   
-  deseq2Stats[[i]] <- list(FDRv, SENv, sensLFCdf)
+  deseq2Stats[[i]] <- list(fdr_df=FDRv, sen_df=SENv, sen_lfc_df=sensLFCdf) # TODO: named list to improve readability and repeatability
 }
 
 
-#LinSigStats
-#limmaStats
-#deseq2Stats
+# Define method names and metrics
+methods <- c("LinSigStats", "limmaStats", "deseq2Stats")
 
-allFDRs <- rbind(LinSigStats[[1]][[1]], LinSigStats[[2]][[1]], LinSigStats[[3]][[1]],
-                 LinSigStats[[4]][[1]], LinSigStats[[5]][[1]], LinSigStats[[6]][[1]],
-                 LinSigStats[[7]][[1]], LinSigStats[[8]][[1]], LinSigStats[[9]][[1]],
-                 LinSigStats[[10]][[1]],
-                 limmaStats[[1]][[1]], limmaStats[[2]][[1]], limmaStats[[3]][[1]],
-                 limmaStats[[4]][[1]], limmaStats[[5]][[1]], limmaStats[[6]][[1]],
-                 limmaStats[[7]][[1]], limmaStats[[8]][[1]], limmaStats[[9]][[1]],
-                 limmaStats[[10]][[1]],
-                 deseq2Stats[[1]][[1]], deseq2Stats[[2]][[1]], deseq2Stats[[3]][[1]],
-                 deseq2Stats[[4]][[1]], deseq2Stats[[5]][[1]], deseq2Stats[[6]][[1]],
-                 deseq2Stats[[7]][[1]], deseq2Stats[[8]][[1]], deseq2Stats[[9]][[1]],
-                 deseq2Stats[[10]][[1]])
-allFDRs$rep <- rep(rep(1:10, each=2),3)
+# Create combined data frames using list comprehension
+combine_data <- function(metric) {
+  do.call(rbind, lapply(methods, function(method) {
+    do.call(rbind, lapply(1:10, function(i) {
+      df <- get(method)[[i]][[metric]]
+      # Add replicate number column
+      df$rep <- i
+      df
+    }))
+  }))
+}
 
-allSENs <- rbind(LinSigStats[[1]][[2]], LinSigStats[[2]][[2]], LinSigStats[[3]][[2]],
-                 LinSigStats[[4]][[2]], LinSigStats[[5]][[2]], LinSigStats[[6]][[2]],
-                 LinSigStats[[7]][[2]], LinSigStats[[8]][[2]], LinSigStats[[9]][[2]],
-                 LinSigStats[[10]][[2]],
-                 limmaStats[[1]][[2]], limmaStats[[2]][[2]], limmaStats[[3]][[2]],
-                 limmaStats[[4]][[2]], limmaStats[[5]][[2]], limmaStats[[6]][[2]],
-                 limmaStats[[7]][[2]], limmaStats[[8]][[2]], limmaStats[[9]][[2]],
-                 limmaStats[[10]][[2]],
-                 deseq2Stats[[1]][[2]], deseq2Stats[[2]][[2]], deseq2Stats[[3]][[2]],
-                 deseq2Stats[[4]][[2]], deseq2Stats[[5]][[2]], deseq2Stats[[6]][[2]],
-                 deseq2Stats[[7]][[2]], deseq2Stats[[8]][[2]], deseq2Stats[[9]][[2]],
-                 deseq2Stats[[10]][[2]])
-allSENs$rep <- rep(rep(1:10, each=2),3)
+# Create combined FDR and Sensitivity data frames
+allFDRs <- combine_data("fdr_df")
+allSENs <- combine_data("sen_df")
 
-allFDRs$Recall <- allSENs$Recall
+# Combine metrics
 allfdrsens <- allFDRs
+allfdrsens$Recall <- allSENs$Recall
 
-allfdrsens$col <- rep(c("red", "green", "blue"), each= 20)
-allfdrsens$shape <- rep(c(18,19), 30)
+# Add visualization parameters
+allfdrsens$col <- rep(c("red", "green", "blue"), each = 20)
+allfdrsens$shape <- rep(c(18, 19), 30)
 
-write.csv(allfdrsens, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/FDR_SENS_plotdata_variableLFC1.5_4.csv")
-
-#write.csv(allfdrsens, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/FDR_SENS_plotdata_variableLFC2_3.25.csv")
+allSensVarLFC <- combine_data("sen_lfc_df")
 
 
+## FDR ~ Sensitivity plot
 ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   geom_point(aes(shape=term), size=2)+
   scale_shape_manual(values=c(21, 22, 24)) +
@@ -304,28 +299,13 @@ ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   stat_ellipse(geom="polygon", level=0.95, aes(fill=method), alpha=0.25)
 
 
-allSensVarLFC <- rbind(LinSigStats[[1]][[3]], LinSigStats[[2]][[3]], LinSigStats[[3]][[3]],
-                 LinSigStats[[4]][[3]], LinSigStats[[5]][[3]], LinSigStats[[6]][[3]],
-                 LinSigStats[[7]][[3]], LinSigStats[[8]][[3]], LinSigStats[[9]][[3]],
-                 LinSigStats[[10]][[3]],
-                 limmaStats[[1]][[3]], limmaStats[[2]][[3]], limmaStats[[3]][[3]],
-                 limmaStats[[4]][[3]], limmaStats[[5]][[3]], limmaStats[[6]][[3]],
-                 limmaStats[[7]][[3]], limmaStats[[8]][[3]], limmaStats[[9]][[3]],
-                 limmaStats[[10]][[3]],
-                 deseq2Stats[[1]][[3]], deseq2Stats[[2]][[3]], deseq2Stats[[3]][[3]],
-                 deseq2Stats[[4]][[3]], deseq2Stats[[5]][[3]], deseq2Stats[[6]][[3]],
-                 deseq2Stats[[7]][[3]], deseq2Stats[[8]][[3]], deseq2Stats[[9]][[3]],
-                 deseq2Stats[[10]][[3]])
-
-
+## Sensitivity ~ Fold Change plot
 ggplot(data=allSensVarLFC[allSensVarLFC$beta>0,], aes(x=beta, y=rate, group=interaction(method, term), color=method, linetype=term))+
   geom_smooth(method="loess",se=T, span=0.7, aes(fill=method), alpha=0.3)+
   ylab("Sensitivity")+
   xlab("fold change") +
   coord_cartesian(ylim=c(0.0, 1))
 
-#write.csv(allSensVarLFC, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/SENS_LFC_plotdata_variableLFC1.5_4.csv")
-allSensVarLFC <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/SENS_LFC_plotdata_variableLFC1.5_4.csv")
 
 ################################################################################
 ################### R E G U L A T I O N    R E C O V E R Y #####################
@@ -336,22 +316,21 @@ allSensVarLFC <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinS
 #dataframe with all types of regulation.
 #For each regulation compute the number of wrong logic/no logic/right logic?
 
-f=params$lfc_reg_recovery_figure
+  f=params$lfc_reg_recovery_figure
+  
+  A <-  c(0,0,f,f,0,0,f,f)
+  B <-  c(0,0,0,0,f,f,f,f)
+  AB<-  c(0,0,0,0,0,0,f,f)
+  BA<-  c(0,0,f,f,-f,-f,0,0)
+  AAB<- c(0,0,f,f,0,0,0,0)
+  BAB<- c(0,0,0,0,f,f,0,0)
+  ABAB<-c(0,0,f,f,f,f,f,f)
+  
+  GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
+  sampledRows <- sample(2000:40000, 5250)
+  emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
+  emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
 
-A <-  c(0,0,f,f,0,0,f,f)
-B <-  c(0,0,0,0,f,f,f,f)
-AB<-  c(0,0,0,0,0,0,f,f)
-BA<-  c(0,0,f,f,-f,-f,0,0)
-AAB<- c(0,0,f,f,0,0,0,0)
-BAB<- c(0,0,0,0,f,f,0,0)
-ABAB<-c(0,0,f,f,f,f,f,f)
-
-
-GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
-sampledRows <- sample(2000:40000, 5250)
-
-emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
-emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
 
 
 reg_rec_datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = params$n_genes_simulated)
@@ -423,6 +402,11 @@ sig2rep2RR9 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSig
 sampledRows <- readLines("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/sampledRows_RR.txt")
 
 
+dfs <- lapply(reg_rec_datasets, function(rdf) {
+  rr <- (2 ^ emptyMatrix) * rdf          # element-wise multiply
+  rownames(rr) <- as.character(seq_len(nrow(rr)))  # set row names
+  rr
+})
 
 
 
@@ -442,12 +426,11 @@ cMisTrueDF <- c()
 cregFDRDF <- c()
 cTMFdf <- c()
 
-dfs <- list(sig2rep2RR0, sig2rep2RR1, sig2rep2RR2, sig2rep2RR3, sig2rep2RR4, 
-            sig2rep2RR5, sig2rep2RR6, sig2rep2RR7, sig2rep2RR8, sig2rep2RR9)
-
 
 for (i in dfs){
   print(head(i))
+  
+  # LinSig
   vregStats <- fit_intmodel(i, size=40000, nclus=7, structureDataFrame = data.frame(col_ctrl=c(1,2),
                                                                                     col_condA=c(3,4),
                                                                                     col_condB=c(5,6),
@@ -521,7 +504,7 @@ for (i in dfs){
   
   regs<-c("A","B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB")
   
-  # compare with other methods
+  # limma
   dge <- DGEList(counts=i)
   dge<- calcNormFactors(dge)
   v <- voom(dge, design)

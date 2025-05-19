@@ -101,8 +101,10 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
                            get_threshold(FDRab, 0.05)),
     Threshold_at_10pct = c(get_threshold(FDRa, 0.10),
                            get_threshold(FDRb, 0.10),
-                           get_threshold(FDRab, 0.10))
+                           get_threshold(FDRab, 0.10)),
+    row.names = c("A", "B", "AB")
   )
+  
   
   # Print summary table
   return(summary_table)
