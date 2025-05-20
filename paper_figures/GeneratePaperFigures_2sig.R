@@ -25,7 +25,7 @@ source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/fit_
 source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
 source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R")
 
-cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
+cts <- read.csv("~/Boston Internship/Github/Rsyn/paper_figures/IL6IL10combDF.csv", row.names=1)[,1:8]
 
 
 #### Functions ####
