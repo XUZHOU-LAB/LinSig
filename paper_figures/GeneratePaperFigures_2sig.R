@@ -28,6 +28,35 @@ source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/comp
 cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
 
 
+#### Functions ####
+
+generateGroundTruthGenes <- function(
+    n_ground_truth_genes, n_total_genes, 
+    range, fold_change, regulation, nrep=2, randomize_pos_neg=T){
+  
+  sampled_rows <- sample(range, n_ground_truth_genes)
+  log_fold_changes <- rep(fold_change, n_ground_truth_genes/length(fold_change)) # length(fold_change) should be a proper divisor of n_ground_truth_genes
+  full_matrix <- matrix(0, nrow=n_total_genes, ncol=nrep*4)
+  gt_matrix <- matrix(
+    rep(regulation, 
+        n_ground_truth_genes/(length(regulation)/(nrep*4)))
+    ,ncol=nrep*4, byrow=T)
+  
+  if (randomize_pos_neg){ random_positive_negative_multiplier <- sample(c(-1,1), n_ground_truth_genes, replace=TRUE) }
+  else { random_positive_negative_multiplier <- 1 }
+  
+  full_matrix[sampled_rows,] <- gt_matrix * log_fold_changes * random_positive_negative_multiplier
+  
+  ground_truth_data <- data.frame(
+    sampled_rows = as.character(sampled_rows),
+    lfc = random_positive_negative_multiplier * log_fold_changes,
+    regulation = rep(1:(length(regulation)/(nrep*4)), 
+                     each = n_ground_truth_genes/(length(regulation)/(nrep*4)))
+  )
+  
+  return(list(emptyMatrix=full_matrix, ground_truth_data=ground_truth_data))
+}
+
 ### PARAMETERS ###
 params <- new.env(parent = emptyenv())
 params$struc_vec <- c(0,1,0, # Only A
@@ -47,55 +76,29 @@ params$lfc_reg_recovery_figure <- log2(2)
 
 
 ###################################################################
-
-# Create ground truth scaling matrix
-create_ground_truth_scaling <- function(logFCs, n_genes_per_group = 3000) {
-  logFCs_all <- rep(logFCs, 2)  # length = 2 × length(logFCs)
-  # Repeat the AB pattern 3000 times for positive and negative effects
-  scaling_AB_pos <- matrix(rep(c(0, 0, 1, 1, 0, 0, 0, 0), n_genes_per_group), ncol = 8, byrow = TRUE)
-  scaling_AB_neg <- matrix(rep(c(0, 0, -1, -1, 0, 0, 0, 0), n_genes_per_group), ncol = 8, byrow = TRUE)
-    design_matrix <- rbind(scaling_AB_pos, scaling_AB_neg)  # 6000 × 8
-    ground_truth_scaling_matrix <- design_matrix * logFCs_all
-  
-  return(ground_truth_scaling_matrix)
-}
-
-# Apply ground truth scaling to datasets
-apply_ground_truth <- function(datasets, ground_truth_scaling, total_genes = 40000, signal_genes = 6000) {
-  empty_matrix <- matrix(0, nrow = total_genes, ncol = 8)
-  sampled_rows <- sample(1:total_genes, signal_genes)
-  print(dim(ground_truth_scaling))         # Should be 6000 x 8
-  print(length(sampled_rows)    )           # Should be 6000
-  empty_matrix[sampled_rows, ] <- ground_truth_scaling
-  
-  # Apply scaling to each dataset
-  scaled_datasets <- lapply(datasets, function(df) {
-    scaled_df <- 2^empty_matrix * df
-    rownames(scaled_df) <- as.character(1:nrow(scaled_df))
-    return(scaled_df)
-  })
-  
-  list(datasets = scaled_datasets, sampled_rows = as.character(sampled_rows))
-}
-
-# Main execution
-logFCs <- log2(seq(1.5, 3.25, by = 0.125))
-logFCs_all <- rep(logFCs, 2)
-
 datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = params$n_genes_simulated)
-ground_truth <- create_ground_truth_scaling(logFCs_all)
-ground_truth_datasets <- apply_ground_truth(datasets, ground_truth)
 
-# Access outputs
-sampledRows <- ground_truth_datasets$sampled_rows
-all10DFs <- ground_truth_datasets$datasets
 
+gt_df <- generateGroundTruthGenes(n_ground_truth_genes = 6000,
+                                 n_total_genes = 40000,
+                                 range=1:40000,
+                                 fold_change = log2(seq(1.5, 3.25, by = 0.125)),
+                                 regulation = c(0, 0,  1,  1, 0, 0, 0, 0),
+                                 randomize_pos_neg = T)
+
+
+ground_truth_datasets <- lapply(datasets, function(df) {
+  scaled_df <- 2^gt_df$emptyMatrix * df
+  rownames(scaled_df) <- as.character(1:nrow(scaled_df))
+  return(scaled_df)
+})
+
+sampledRows <- gt_df$ground_truth_data$sampled_rows
 
 
 ###########################################
 ########## S T A T S ######################
 ###########################################
-
 
 ##### A N A L Y S E    L I N S I G #####
 LinSigStats <- list()
@@ -104,7 +107,7 @@ LinSigStats <- list()
 compute_lfc_thresholds(sig2rep2v1,nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
-  randomDataFrame <- all10DFs[[i]]
+  randomDataFrame <- ground_truth_datasets[[i]]
   GTnorm <- MedianNorm(randomDataFrame)
   GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = params$strucDF)
   GTstat <- ratios.fit(GTratios, CompThreshold = 1)
@@ -160,7 +163,7 @@ cont.matrix <- cbind(HvsLinctrl=c(0,0,1,0),
 
 limmaStats <- list()
 for (i in 1:params$n_synth_dfs){
-  randomDataFrame <- all10DFs[[i]]
+  randomDataFrame <- ground_truth_datasets[[i]]
   dge <- DGEList(counts=randomDataFrame)
   dge<- calcNormFactors(dge)
   v <- voom(dge, design)
@@ -210,7 +213,7 @@ rownames(metadata) <- colnames(sig2rep2v0)
 
 deseq2Stats <- list()
 for (i in 1:params$n_synth_dfs){
-  randomDataFrame <- all10DFs[[i]]
+  randomDataFrame <- ground_truth_datasets[[i]]
   
   ddsr <-  DESeqDataSetFromMatrix(round(randomDataFrame), colData=metadata, design =~ genotype + condition + genotype:condition)
   ddsr$genotype = relevel(ddsr$genotype, "WT")
@@ -307,6 +310,9 @@ ggplot(data=allSensVarLFC[allSensVarLFC$beta>0,], aes(x=beta, y=rate, group=inte
   coord_cartesian(ylim=c(0.0, 1))
 
 
+
+
+
 ################################################################################
 ################### R E G U L A T I O N    R E C O V E R Y #####################
 ################################################################################
@@ -331,82 +337,33 @@ ggplot(data=allSensVarLFC[allSensVarLFC$beta>0,], aes(x=beta, y=rate, group=inte
   emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
   emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
 
+A <-  c(0,0,1,1,0,0,1,1)
+B <-  c(0,0,0,0,1,1,1,1)
+AB<-  c(0,0,0,0,0,0,1,1)
+BA<-  c(0,0,1,1,-1,-1,0,0)
+AAB<- c(0,0,1,1,0,0,0,0)
+BAB<- c(0,0,0,0,1,1,0,0)
+ABAB<-c(0,0,1,1,1,1,1,1)
 
+gt_df <- generateGroundTruthGenes(n_ground_truth_genes = 5250, # 7 regulation types, each 750 times simulated
+                         n_total_genes = 40000,
+                         range=2000:40000, # counts are ordered, so by picking a range above 2000 you're avoiding genes that have a count of 1-10 or so.
+                         fold_change = params$lfc_reg_recovery_figure,
+                         regulation = c(A,B,AB,BA,AAB,BAB,ABAB))
 
 reg_rec_datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = params$n_genes_simulated)
 
 
-
-rdf1 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf2 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf3 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf4 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf5 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf6 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf7 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf8 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf9 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-rdf0 <- generate_synthetic_data(source_df = cts, nrep=2, size=40000)
-
-
-
-# ground truth data set 2 signals, 2 replicates, variable ground truth LFCs
-sig2rep2RR0<-(2^(emptyMatrix)*rdf0) # RR for Regulation Recovery
-sig2rep2RR1<-(2^(emptyMatrix)*rdf1)
-sig2rep2RR2<-(2^(emptyMatrix)*rdf2)
-sig2rep2RR3<-(2^(emptyMatrix)*rdf3)
-sig2rep2RR4<-(2^(emptyMatrix)*rdf4)
-sig2rep2RR5<-(2^(emptyMatrix)*rdf5)
-sig2rep2RR6<-(2^(emptyMatrix)*rdf6)
-sig2rep2RR7<-(2^(emptyMatrix)*rdf7)
-sig2rep2RR8<-(2^(emptyMatrix)*rdf8)
-sig2rep2RR9<-(2^(emptyMatrix)*rdf9)
-
-
-rownames(sig2rep2RR0) <- as.character(1:nrow(sig2rep2RR0))
-rownames(sig2rep2RR1) <- as.character(1:nrow(sig2rep2RR1))
-rownames(sig2rep2RR2) <- as.character(1:nrow(sig2rep2RR2))
-rownames(sig2rep2RR3) <- as.character(1:nrow(sig2rep2RR3))
-rownames(sig2rep2RR4) <- as.character(1:nrow(sig2rep2RR4))
-rownames(sig2rep2RR5) <- as.character(1:nrow(sig2rep2RR5))
-rownames(sig2rep2RR6) <- as.character(1:nrow(sig2rep2RR6))
-rownames(sig2rep2RR7) <- as.character(1:nrow(sig2rep2RR7))
-rownames(sig2rep2RR8) <- as.character(1:nrow(sig2rep2RR8))
-rownames(sig2rep2RR9) <- as.character(1:nrow(sig2rep2RR9))
-
-write.csv(sig2rep2RR0, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf0_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR1, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf1_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR2, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf2_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR3, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf3_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR4, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf4_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR5, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf5_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR6, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf6_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR7, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf7_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR8, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf8_2sig_2rep_RR.csv")
-write.csv(sig2rep2RR9, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf9_2sig_2rep_RR.csv")
-
-sampledRows <- as.character(sampledRows)
-write(sampledRows, "sampledRows_RR.txt") # vector with row names of ground truth genes
-
-sig2rep2RR0 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf0_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR1 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf1_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR2 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf2_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR3 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf3_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR4 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf4_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR5 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf5_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR6 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf6_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR7 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf7_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR8 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf8_2sig_2rep_RR.csv", row.names = 1)
-sig2rep2RR9 <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/rdf9_2sig_2rep_RR.csv", row.names = 1)
-
-sampledRows <- readLines("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/sampledRows_RR.txt")
-
-
-dfs <- lapply(reg_rec_datasets, function(rdf) {
-  rr <- (2 ^ emptyMatrix) * rdf          # element-wise multiply
-  rownames(rr) <- as.character(seq_len(nrow(rr)))  # set row names
-  rr
+ground_truth_datasets <- lapply(reg_rec_datasets, function(df) {
+  scaled_df <- 2^gt_df$emptyMatrix * df
+  rownames(scaled_df) <- as.character(1:nrow(scaled_df))
+  return(scaled_df)
 })
+
+sampledRows <- gt_df$ground_truth_data$sampled_rows
+
+ground_truth_datasets
+
 
 
 
