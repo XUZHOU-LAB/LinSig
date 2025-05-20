@@ -322,20 +322,20 @@ ggplot(data=allSensVarLFC[allSensVarLFC$beta>0,], aes(x=beta, y=rate, group=inte
 #dataframe with all types of regulation.
 #For each regulation compute the number of wrong logic/no logic/right logic?
 
-  f=params$lfc_reg_recovery_figure
-  
-  A <-  c(0,0,f,f,0,0,f,f)
-  B <-  c(0,0,0,0,f,f,f,f)
-  AB<-  c(0,0,0,0,0,0,f,f)
-  BA<-  c(0,0,f,f,-f,-f,0,0)
-  AAB<- c(0,0,f,f,0,0,0,0)
-  BAB<- c(0,0,0,0,f,f,0,0)
-  ABAB<-c(0,0,f,f,f,f,f,f)
-  
-  GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
-  sampledRows <- sample(2000:40000, 5250)
-  emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
-  emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
+  # f=params$lfc_reg_recovery_figure
+  # 
+  # A <-  c(0,0,f,f,0,0,f,f)
+  # B <-  c(0,0,0,0,f,f,f,f)
+  # AB<-  c(0,0,0,0,0,0,f,f)
+  # BA<-  c(0,0,f,f,-f,-f,0,0)
+  # AAB<- c(0,0,f,f,0,0,0,0)
+  # BAB<- c(0,0,0,0,f,f,0,0)
+  # ABAB<-c(0,0,f,f,f,f,f,f)
+  # 
+  # GTmatrix <- matrix(rep(c(A,B,AB,BA,AAB,BAB,ABAB),750), ncol=8,byrow = T)
+  # sampledRows <- sample(2000:40000, 5250)
+  # emptyMatrix <- matrix(0, nrow=nrow(rdf1), ncol=8)
+  # emptyMatrix[sampledRows,] <- GTmatrix * sample(c(-1,1), 5250, replace=TRUE)
 
 A <-  c(0,0,1,1,0,0,1,1)
 B <-  c(0,0,0,0,1,1,1,1)
@@ -384,7 +384,7 @@ cregFDRDF <- c()
 cTMFdf <- c()
 
 
-for (i in dfs){
+for (i in ground_truth_datasets){
   print(head(i))
   
   # LinSig
