@@ -388,36 +388,40 @@ for (i in ground_truth_datasets){
   print(head(i))
   
   # LinSig
-  vregStats <- fit_intmodel(i, size=40000, nclus=7, structureDataFrame = data.frame(col_ctrl=c(1,2),
-                                                                                    col_condA=c(3,4),
-                                                                                    col_condB=c(5,6),
-                                                                                    col_condAB=c(7,8)))
+  vregStats <- fit_intmodel(i, size=40000, structureDataFrame = params$strucDF)
+  
   
   onlyRegulatedGenes <- data.frame(vregStats[as.character(sampledRows),])
+  regs<-c("A","B", "A:B", "A+B", "B+AB", "A+AB", "A+B+AB")
+  ground_truth_labels <- rep(regs, 750)
+  onlyRegulatedGenes$true_class <- ground_truth_labels
   
-  otruereg <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3>0.00 & rep(1:7, 750)==2, na.rm=T), #
+  
+  # only true discovery genes
+  otruereg1 <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
+                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3>0.00 & onlyRegulatedGenes$true_class=="B", na.rm=T), #
                 #just B rep(1:7, 750)==2
                 sum(onlyRegulatedGenes$FDRA>0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1>0.00 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3>0.00 & rep(1:7, 750)==1, na.rm=T),
+                      onlyRegulatedGenes$cov_x1>0.00 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3>0.00 & onlyRegulatedGenes$true_class=="A", na.rm=T),
                 #just A+B rep(1:7, 750)==3
                 sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3>0 & rep(1:7, 750)==4, na.rm=T),
+                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3>0 & onlyRegulatedGenes$true_class=="A+B", na.rm=T),
                 #just AB rep(1:7, 750)==4
                 sum(onlyRegulatedGenes$FDRA>0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB<0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1>0.00 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3<0.05 & rep(1:7, 750)==3, na.rm=T),
+                      onlyRegulatedGenes$cov_x1>0.00 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3<0.05 & onlyRegulatedGenes$true_class=="A:B", na.rm=T),
                 #just A+AB rep(1:7, 750)==5
                 sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB<0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3<0.05 & rep(1:7, 750)==6, na.rm=T),
+                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3<0.05 & onlyRegulatedGenes$true_class=="A+AB", na.rm=T),
                 #just B+AB rep(1:7, 750)==6
                 sum(onlyRegulatedGenes$FDRA>0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB<0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1>0.00 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3<0.05 & rep(1:7, 750)==5, na.rm=T),
+                      onlyRegulatedGenes$cov_x1>0.00 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3<0.05 & onlyRegulatedGenes$true_class=="B+AB", na.rm=T),
                 #just A+B+AB rep(1:7, 750)==7
                 sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB<0.05 & onlyRegulatedGenes$R2>0.8 &
-                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3<0.05 & rep(1:7, 750)==7, na.rm=T))
-  
+                      onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2<0.05 & onlyRegulatedGenes$cov_x3<0.05 & onlyRegulatedGenes$true_class=="A+B+AB", na.rm=T))
+
+
   #regrec
-  omistrue <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
+  omistrue1 <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
                       onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3>0.00 ,na.rm=T), #
                 #just B rep(1:7, 750)==2
                 sum(onlyRegulatedGenes$FDRA>0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
@@ -477,13 +481,13 @@ for (i in ground_truth_datasets){
   l2 <- (topTable(fit, number=Inf,coef=2, sort="none"))
   l2s<- (topTable(fit, number=Inf,coef=2)[sampledRows,])
   
-  litruereg<- c(sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val>0.05 & rep(1:7, 750)==1),
-                sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val>0.05 & rep(1:7, 750)==2),
-                sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val>0.05 & rep(1:7, 750)==4),
-                sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val<0.05 & rep(1:7, 750)==3),
-                sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val<0.05 & rep(1:7, 750)==5),
-                sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val<0.05 & rep(1:7, 750)==6),
-                sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val<0.05 & rep(1:7, 750)==7))
+  litruereg1<- c(sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='A'),
+                sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='B'),
+                sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='A+B'),
+                sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val<0.05 & onlyRegulatedGenes$true_class=='A:B'),
+                sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val<0.05 & onlyRegulatedGenes$true_class=='B+AB'),
+                sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val<0.05 & onlyRegulatedGenes$true_class=='A+AB'),
+                sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val<0.05 & onlyRegulatedGenes$true_class=='A+B+AB'))
   
   #Aliregsens
   limistrue<- c(sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val>0.05),
@@ -528,13 +532,13 @@ for (i in ground_truth_datasets){
   resrA$padj[is.na(resrA$padj)] <- 1
   sum(resrA$pvalue<0.05, na.rm=T)
   
-  d2truereg <-c(sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj>0.05 & rep(1:7, 750)==1),
-                sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj>0.05 & rep(1:7, 750)==2),
-                sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj>0.05 & rep(1:7, 750)==4),
-                sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj<0.05 & rep(1:7, 750)==3),
-                sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj<0.05 & rep(1:7, 750)==5),
-                sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj<0.05 & rep(1:7, 750)==6),
-                sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj<0.05 & rep(1:7, 750)==7))
+  d2truereg1 <-c(sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='A'),
+                sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='B'),
+                sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='A+B'),
+                sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj<0.05 & onlyRegulatedGenes$true_class=='A:B'),
+                sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj<0.05 & onlyRegulatedGenes$true_class=='B+AB'),
+                sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj<0.05 & onlyRegulatedGenes$true_class=='A+AB'),
+                sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj<0.05 & onlyRegulatedGenes$true_class=='A+B+AB'))
   
   #Ad2regsens
   d2mistrue <-c(sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj>0.05),
@@ -558,7 +562,7 @@ for (i in ground_truth_datasets){
                           "RegLgc"=rep(factor(c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB"), level=c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB")),3),
                           "Method"= rep(c("own", "deseq2", "limma"),each=7))
   cTrueRegDF <- rbind(cTrueRegDF, TrueRegDF)
-  
+  s
   MisTrueDF <- data.frame("Recall"=c(omistrue, d2mistrue, limistrue),
                           "RegLgc"=rep(factor(c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB"), level=c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB")),3),
                           "Method"= rep(c("own", "deseq2", "limma"),each=7))
@@ -574,19 +578,19 @@ for (i in ground_truth_datasets){
                       "discovery"=c(rep(c("True Disc", "Mis Class", "False Disc"),each=21)),
                       "method"=rep(TrueRegDF$Method, 3),
                       "Regulation"=rep(TrueRegDF$RegLgc, 3),
-                      "replicate"=rep(10, 63)
+                      "replicate"=rep(i, 63)
   )
-  print(TMFdf)
+  
+  
   cTMFdf <- rbind(cTMFdf, TMFdf)
 }
 
 
 write.csv(cTMFdf, "C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/2sig_2rep_RegulationRecoveryData.csv")
-cTMFdf <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/LinSigPaper/2sig_data/2sig_2rep_RegulationRecoveryData.csv")
+
 
 RegulationGroups <- c("A/B", "A/B", "A+B","A:B", "A/B+A:B","A/B+A:B", "A/B+A:B")
 cTMFdf$RegulationGroups <- rep(RegulationGroups, 90)
-
 
 
 statTMFdf <- cTMFdf %>%
