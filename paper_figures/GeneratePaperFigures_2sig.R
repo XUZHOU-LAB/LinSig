@@ -362,8 +362,68 @@ ground_truth_datasets <- lapply(reg_rec_datasets, function(df) {
 
 sampledRows <- gt_df$ground_truth_data$sampled_rows
 
-ground_truth_datasets
 
+
+## TODO: refactor this function because it contains a lot of repetitive parts
+fit_intmodel <- function(counts, meanThr=10, pseudo=1, lowess=FALSE,
+                         FDR_pval=0.05, sizeRDF=60000, structureDataFrame){
+  
+  normed <- MedianNorm(counts, countthres = meanThr, pseudo = pseudo)
+  rats <- compute_ratios(normed, lowess_norm = F, structureDataFrame = structureDataFrame)
+  fitstats <- ratios.fit(rats, CompThreshold = 1, n_rep=nrep) # compute model statistics
+  
+  RandomDF <- generate_synthetic_data(counts, size = 40000, nrep=2)
+  
+  message("Random Dataset succesfully created for FDR")
+  #mediannorm for random dataset
+  normedR <- MedianNorm(RandomDF)
+  #compute ratios for random dataset
+  ratsR <- compute_ratios(normedR, lowess_norm=lowess, structureDataFrame = params$strucDF)
+  #fit model for random dataset
+  message("computing random stats")
+  statsR <- ratios.fit(ratsR, CompThreshold=1,n_rep=nrep)
+  
+  statsR$SIGA <- statsR[,6]<0.05 & statsR$R2>0.8 # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
+  statsR$SIGB <- statsR[,7]<0.05 & statsR$R2>0.8
+  statsR$SIGAB <-statsR[,8]<0.05 & statsR$R2>0.8
+  
+  print(sum(statsR$SIGA))
+  print(sum(statsR$SIGB))
+  print(sum(statsR$SIGAB))
+  
+  FDRA <- statsR[statsR$SIGA,]
+  FDRB <- statsR[statsR$SIGB,]
+  FDRAB<- statsR[statsR$SIGAB,]
+  
+  FDRab <- FDRb <- FDRa <- c()
+  for (i in 1:length(seq(0,4,0.001))){
+    FDRab[i] <- mean(abs(FDRAB$X3)>(seq(0,4,0.001)[i]))
+  }
+  for (i in 1:length(seq(0,4,0.001))){
+    FDRb[i] <- mean(abs(FDRB$X2)>(seq(0,4,0.001)[i]))
+  }
+  for (i in 1:length(seq(0,4,0.001))){
+    FDRa[i] <- mean(abs(FDRA$X1)>(seq(0,4,0.001)[i]))
+  }
+  xs <- seq(0,4,0.001)
+  FDRDF <- data.frame("Xs"=xs, "FDRa"=FDRa,"FDRb"=FDRb, "FDRab"=FDRab)
+  print(paste("5% FDR B_threshold A:", seq(0,4,0.001)[which.min(abs(FDRa-0.05))]))
+  print(paste("5% FDR B_threshold B:", seq(0,4,0.001)[which.min(abs(FDRb-0.05))]))
+  print(paste("5% FDR B_threshold AB:",seq(0,4,0.001)[which.min(abs(FDRab-0.05))]))
+  
+  NN <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
+    loc <- which.min(abs(x-abs(i)))
+    return(y[loc])
+  } #nearest neighbor function
+  
+  #compute FDR chance statistic
+  fitstats$FDRA <- sapply(fitstats$X1, NN, x=xs, y=FDRa)
+  fitstats$FDRB <- sapply(fitstats$X2, NN, x=xs, y=FDRb)
+  fitstats$FDRAB <- sapply(fitstats$X3, NN, x=xs, y=FDRab)
+  
+  #output dataset
+  return(fitstats)
+}
 
 
 
@@ -382,6 +442,7 @@ cTrueRegDF <- c()
 cMisTrueDF <- c()
 cregFDRDF <- c()
 cTMFdf <- c()
+
 
 
 for (i in ground_truth_datasets){
