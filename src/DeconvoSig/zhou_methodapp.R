@@ -164,13 +164,14 @@ server = function(input,output, session){
   })
   
   deconvolute <- eventReactive(input$deconvolute, {
-    deconvoluteFunction(normRatios()[firstFilter(),], inputfile())
+    deconvoluteFunction(normRatios()[firstFilter(),], inputfile(), 
+                        n_rep=input$reps, input$H0Thres)
   })
   
   #returns Pvalues based on LFC and COVs
   Pvalues_real <- reactive({
     real_stats <- deconvolute()
-    p <- calcPvalue(real_stats[,1:4], real_stats[,5:8], input$H0Thres)
+    p <- real_stats[,5:8]
     print(paste("real", sum(rowSums(p <= 0.05) > 0)))
     print(sum(rowSums(p > 0.5) > 0))
     colnames(p) <- paste0("p_", colnames(p))
@@ -215,9 +216,10 @@ server = function(input,output, session){
                                     lowess = input$lowess,
                                     replicates = 2)
     
-    modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF)
+    modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF,
+                                      n_rep=input$reps, input$H0Thres)
     
-    modelStats[,5:8] <- calcPvalue(modelStats[,1:4], modelStats[5:8], 1)
+ #modelStats[,5:8] <- calcPvalue(modelStats[,1:4], modelStats[5:8], 1)
     colnames(modelStats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
     
     modelStats$SIGB <- modelStats[,6] < 0.05 & modelStats$R2 > 0.8 # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
@@ -244,6 +246,7 @@ server = function(input,output, session){
     print(paste("5% FDR B_threshold A:", seq(0,4,0.001)[which.min(abs(FDRa-0.05))]))
     print(paste("5% FDR B_threshold B:", seq(0,4,0.001)[which.min(abs(FDRb-0.05))]))
     print(paste("5% FDR B_threshold AB:",seq(0,4,0.001)[which.min(abs(FDRab-0.05))]))
+    
     
     return(list(sampledMuCoV, FDRa, FDRb, FDRab))
   })

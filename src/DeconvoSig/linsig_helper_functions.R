@@ -85,7 +85,8 @@ normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
   
 }
 
-deconvoluteFunction <- function(ratiosDF, countDF){
+deconvoluteFunction <- function(ratiosDF, countDF, 
+                                n_rep, H0_threshold){
   ratios <- ratiosDF
   
   n_samples = ncol(ratios)
@@ -127,6 +128,17 @@ deconvoluteFunction <- function(ratiosDF, countDF){
   coefficients <- t(multiplefit$coefficients)
   covB <- as.data.frame(covB)
   
+  
+  # Calculate P-values
+  n_samples <- 4*n_rep
+  n_var <- 3
+  DoF <- n_samples - n_var - 1
+  ttest_stat <- (abs(coefficients) - log2(H0_threshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
+  ttest_stat <- data.frame(ttest_stat)
+  
+  Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
+  
+  
   #get column data
   cc <- strsplit(colnames(countDF)[1:8], "_") # change to 4*n_replicates
   print(cc)
@@ -134,25 +146,26 @@ deconvoluteFunction <- function(ratiosDF, countDF){
   print(cols)
   
   
-  modelStats <- data.frame(cbind(coefficients, covB, rsquared))
+  
+  modelStats <- data.frame(cbind(coefficients, Pvalue, rsquared))
 
   colnames(modelStats) <- c("int", cols[2], cols[1], cols[3], "p_int",
                             paste0("cov_", cols[2]), paste0("cov_", cols[1]), paste0("cov_", cols[3]),
                             "R2")
   
-  return(modelStats)
+  return(round(modelStats,4))
 }
 
 #compute P value with threshold
-calcPvalue <- function(betas, covB, treshold){ # edit P statistic for mulitple reps
-  ttest_stat <- (abs(betas) - log2(treshold)) / sqrt(covB)
-  ttest_stat <- data.frame(ttest_stat)
-  n_samples = 4*2 # conditions * replicates
-  n_var = 3 # number of variables B1, B2, B3
-  DoF <- n_samples - n_var - 1
-  Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
-  return(Pvalue)
-}
+# calcPvalue <- function(betas, covB, treshold){ # edit P statistic for mulitple reps
+#   ttest_stat <- (abs(betas) - log2(treshold)) / sqrt(covB)
+#   ttest_stat <- data.frame(ttest_stat)
+#   n_samples = 4*2 # conditions * replicates
+#   n_var = 3 # number of variables B1, B2, B3
+#   DoF <- n_samples - n_var - 1
+#   Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
+#   return(Pvalue)
+# }
 
 NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
   loc <- which.min(abs(x-abs(i)))
