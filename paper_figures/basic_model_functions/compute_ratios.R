@@ -29,7 +29,8 @@ RNAseqLowess <- function(LogIntensity, LogRatios){
 #' For example: control condition is in columns 1 and 2. Enter: 1,2
 #' The output of the function is a dataframe with LogRatios to be used for the fitting of the model
 
-compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataFrame=NULL){
+compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataFrame=NULL,
+                           n_replicates=2){
 
 
   if (typeof(structureDataFrame) == "list") {
@@ -37,32 +38,26 @@ compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataF
     col_condA <- structureDataFrame$col_condA
     col_condB <- structureDataFrame$col_condB
     col_condAB<- structureDataFrame$col_condAB
+    n_replicates=length(col_ctrl)
   }
   else {
-    message("You will be asked to enter column names for each condition.")
-    message("If you have replicates, separate the column numbers with a comma. Example: 1,2")
-
-    ctrl  <- readline("Enter column number(s) for condition ctrl:")
-    condA <- readline("Enter column number(s) for condition A:")
-    condB <- readline("Enter column number(s) for condition B:")
-    condAB<- readline("Enter column number(s) for condition AB:")
-
-    col_ctrl <- as.numeric(unlist(strsplit(ctrl, ",")))
-    col_condA <- as.numeric(unlist(strsplit(condA, ",")))
-    col_condB <- as.numeric(unlist(strsplit(condB, ",")))
-    col_condAB <- as.numeric(unlist(strsplit(condAB, ",")))
+    # else assume column order based on example dataset (n_replicates=2)
+    col_ctrl <- 1:n_replicates
+    col_condA <- 1:n_replicates + n_replicates
+    col_condB <- 1:n_replicates + n_replicates*2
+    col_condAB <- 1:n_replicates + n_replicates*3
   }
 
   dfPseudo <- df + pseudo_count # add pseudo count to dataset
 
-  nreps=length(col_ctrl)
-  LogRatios <- matrix(nrow=nrow(dfPseudo), ncol=nreps*5) # initialize empty matrix
-  LogIntensity <- matrix(nrow=nrow(dfPseudo), ncol=nreps*5) # initialize empty matrix
+
+  LogRatios <- matrix(nrow=nrow(dfPseudo), ncol=n_replicates*5) # initialize empty matrix
+  LogIntensity <- matrix(nrow=nrow(dfPseudo), ncol=n_replicates*5) # initialize empty matrix
 
 
   # Compute log ratios
   print("computing log ratios")
-  for (i in 1:nreps){
+  for (i in 1:n_replicates){
     LogRatios[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] / dfPseudo[, col_ctrl[i]])
     LogRatios[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condB[i]])
     LogRatios[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] / dfPseudo[, col_ctrl[i]])
@@ -84,16 +79,16 @@ compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataF
   }
 
   print("Performing LOWESS normalization...")
-  Ratios <- matrix(nrow = nrow(LogRatios), ncol = ncol(LogRatios))
+  normalizedRatios <- matrix(nrow = nrow(LogRatios), ncol = ncol(LogRatios))
   #colnames(Ratios) <- col_names
   pb <- txtProgressBar(min = 0, max = ncol(LogRatios), style = 3)
 
   for (i in 1:ncol(LogRatios)) {
-    Ratios[, i] <- RNAseqLowess(LogIntensity[, i], LogRatios[, i])
+    normalizedRatios[, i] <- RNAseqLowess(LogIntensity[, i], LogRatios[, i])
     setTxtProgressBar(pb, i)
   }
   close(pb)
 
-  rownames(Ratios) <- rownames(df)
-  return(Ratios)
+  rownames(normalizedRatios) <- rownames(df)
+  return(normalizedRatios)
 }
