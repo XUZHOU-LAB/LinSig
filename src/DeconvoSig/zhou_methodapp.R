@@ -217,6 +217,7 @@ server = function(input,output, session){
     
     modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF,
                                       n_rep=input$reps, H0_threshold=1) # why hardcoded 1 (=0) here?
+    # I guess because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
     
     colnames(modelStats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
     
