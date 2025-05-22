@@ -86,57 +86,60 @@ normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
 }
 
 deconvoluteFunction <- function(ratiosDF, countDF){
-  Ratios <- ratiosDF
+  ratios <- ratiosDF
+  
+  n_samples = ncol(ratios)
+  
   
   strucvec <- rep(c(0,1,0, # creates a matrix for X in y ~ X. X is dependent on number of replicates
                     0,1,1, # 5 rows in X for each replicate
                     1,0,0,
                     1,0,1,
-                    1,1,1),
-                  (length(Ratios[1,])/5))
+                    1,1,1), times = n_samples/5)
   
-  numberOfGenes = length(Ratios[,1])
   
-  X <- matrix(strucvec, 
-              ncol=3, 
-              byrow=T)
-  B = matrix(0, nrow=numberOfGenes,ncol=4);
+  X <- matrix(strucvec, ncol=3, byrow=T)
+  
+  # Fit multivariate linear model
+  multiplefit <- lm(t(ratios) ~ X)
+  residuals <- t(multiplefit$residuals)
+  
+  # Precompute model components for covariance calculation
+  model_matrix <- cbind(1, X)  # Include intercept
+  xtx_inv <- solve(crossprod(model_matrix))
+  diag_xtx_inv <- diag(xtx_inv)
+  n_coef <- ncol(model_matrix)
+  
+  # Calculate residual sum of squares and variance estimates
+  rss <- rowSums(residuals^2)
+  sigma_sq <- rss / (n_samples - n_coef)
+  
+  # Compute coefficient covariance matrices
+  covB <- outer(sigma_sq, diag_xtx_inv, "*")
+  colnames(covB) <- c("cov_int", "cov_x1", "cov_x2", "cov_x3")
+  
+  # Calculate adjusted R-squared efficiently
+  row_means <- rowMeans(ratios)
+  tss <- rowSums(ratios^2) - n_samples * row_means^2
+  rsquared <- 1 - (rss / (n_samples - n_coef)) / (tss / (n_samples - 1))
+  
+  # Extract coefficients and format results
+  coefficients <- t(multiplefit$coefficients)
+  covB <- as.data.frame(covB)
   
   #get column data
   cc <- strsplit(colnames(countDF)[1:8], "_") # change to 4*n_replicates
   print(cc)
   cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
   print(cols)
-  colnames(X) <- c(cols[2], cols[1], cols[3])
   
-  rsquare <- vector()
-  ngen <- length(Ratios[,1])
-  covB_l <- NULL
-  covB <- data.frame(cov_int=double(ngen), cov_x1=double(ngen), 
-                     cov_x2=double(ngen), cov_x3=double(ngen))
   
-  #adds progress bar
-  withProgress(message="Computing Model Statistics", value=0,{
-    
-    print(paste("Total number of genes:", ngen))
-    for (i in 1:ngen){
-      fit <- lm(Ratios[i,] ~ X) # for each gene, fit linear model
-      covB[i,] <- diag(vcov(fit))
-      rsquare[i] <- summary(fit)$adj.r.squared
-      incProgress(1/ngen)
-    }
-  })
-  
-  multiplefit <- lm(t(Ratios) ~ X)
-  B <- t(multiplefit$coefficients)
-  Resid <- multiplefit$residuals
-  
-  modelStats <- as.data.frame(cbind(B, covB))
-  
+  modelStats <- data.frame(cbind(coefficients, covB, rsquared))
+
   colnames(modelStats) <- c("int", cols[2], cols[1], cols[3], "p_int",
-                            paste0("cov_", cols[2]), paste0("cov_", cols[1]), paste0("cov_", cols[3]))
-  modelStats$R2 <- rsquare
-  modelStats <- round(modelStats, digits=7)
+                            paste0("cov_", cols[2]), paste0("cov_", cols[1]), paste0("cov_", cols[3]),
+                            "R2")
+  
   return(modelStats)
 }
 
@@ -144,7 +147,7 @@ deconvoluteFunction <- function(ratiosDF, countDF){
 calcPvalue <- function(betas, covB, treshold){ # edit P statistic for mulitple reps
   ttest_stat <- (abs(betas) - log2(treshold)) / sqrt(covB)
   ttest_stat <- data.frame(ttest_stat)
-  n_samples = 4*2 # replicates * conditions
+  n_samples = 4*2 # conditions * replicates
   n_var = 3 # number of variables B1, B2, B3
   DoF <- n_samples - n_var - 1
   Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
