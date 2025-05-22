@@ -156,16 +156,6 @@ deconvoluteFunction <- function(ratiosDF, countDF,
   return(round(modelStats,4))
 }
 
-#compute P value with threshold
-# calcPvalue <- function(betas, covB, treshold){ # edit P statistic for mulitple reps
-#   ttest_stat <- (abs(betas) - log2(treshold)) / sqrt(covB)
-#   ttest_stat <- data.frame(ttest_stat)
-#   n_samples = 4*2 # conditions * replicates
-#   n_var = 3 # number of variables B1, B2, B3
-#   DoF <- n_samples - n_var - 1
-#   Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
-#   return(Pvalue)
-# }
 
 NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
   loc <- which.min(abs(x-abs(i)))

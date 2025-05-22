@@ -176,17 +176,16 @@ server = function(input,output, session){
     print(sum(rowSums(p > 0.5) > 0))
     colnames(p) <- paste0("p_", colnames(p))
     return(p)
-    
   })
   
   sigReal <- reactive({
-    Pvalues <- Pvalues_real()
+    #Pvalues <- Pvalues_real()
     real_stats <- deconvolute()
     r2 <- real_stats$R2
     FCFDR <- log2(input$FCFDR)
-    A <- (abs(real_stats[,2]) > FCFDR & r2 > input$R2Thres & Pvalues[,2] < 0.05)
-    B <- (abs(real_stats[,3]) > FCFDR & r2 > input$R2Thres & Pvalues[,3] < 0.05)
-    AB <- (abs(real_stats[,4]) > FCFDR & r2 > input$R2Thres & Pvalues[,4]< 0.05)
+    A <- (abs(real_stats[,2]) > FCFDR & r2 > input$R2Thres & real_stats[,6] < 0.05)
+    B <- (abs(real_stats[,3]) > FCFDR & r2 > input$R2Thres & real_stats[,7] < 0.05)
+    AB <- (abs(real_stats[,4]) > FCFDR & r2 > input$R2Thres & real_stats[,8]< 0.05)
     print(paste("real A|B|AB:", sum(A|B|AB)))
     print(paste("A B AB", sum(A), sum(B), sum(AB)))
     
@@ -219,7 +218,6 @@ server = function(input,output, session){
     modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF,
                                       n_rep=input$reps, H0_threshold=1) # why hardcoded 1 (=0) here?
     
- #modelStats[,5:8] <- calcPvalue(modelStats[,1:4], modelStats[5:8], 1)
     colnames(modelStats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
     
     modelStats$SIGB <- modelStats[,6] < 0.05 & modelStats$R2 > 0.8 # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
