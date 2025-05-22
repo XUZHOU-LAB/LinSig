@@ -18,6 +18,7 @@ library(markdown)
 
 
 source("./linsig_helper_functions.R")
+source("./gen_synthetic_data_helpers.R")
 
 # for deploying paste in R console:
 #library(BiocManager)
@@ -195,52 +196,19 @@ server = function(input,output, session){
   compFalseDisc <- eventReactive(input$compFDR, {
     #normalize countdata
     cntMat <- as.matrix(inputfile()[,1:8])
-    normedCounts <- MedianNorm(cntMat, countThres=input$cntThres, pseudo=input$pseudo)
     
-    #compute mean/sd per condition
-    mean_per_condition <- matrix(ncol=4,nrow=nrow(normedCounts))
-    mean_per_condition[,1] <- rowMeans(normedCounts[, c(1,2)])
-    mean_per_condition[,2] <- rowMeans(normedCounts[, c(3,4)])
-    mean_per_condition[,3] <- rowMeans(normedCounts[, c(5,6)])
-    mean_per_condition[,4] <- rowMeans(normedCounts[, c(7,8)])
+    # generate dataframe with mean row ~ coefficient of variation (between replicates)
+    sampledMuCoV <- generate_mucov_df(cntMat, size=input$RDFsize, nrep=input$reps,
+                                      countThres=input$cntThres)
     
-    sd_per_condition <- matrix(ncol=4,nrow=nrow(normedCounts))
-    sd_per_condition[,1] <- sqrt(rowSums((rowMeans(normedCounts[,c(1,2)]) - normedCounts[,c(1,2)])**2))
-    sd_per_condition[,2] <- sqrt(rowSums((rowMeans(normedCounts[,c(3,4)]) - normedCounts[,c(3,4)])**2))
-    sd_per_condition[,3] <- sqrt(rowSums((rowMeans(normedCounts[,c(5,6)]) - normedCounts[,c(5,6)])**2))
-    sd_per_condition[,4] <- sqrt(rowSums((rowMeans(normedCounts[,c(7,8)]) - normedCounts[,c(7,8)])**2))
+
+    # draw new counts from normal distribution using mu (row mean) and CoV
+    RandomDF <- t(
+      apply(sampledMuCoV, 1, FUN=drawreps, nrep=input$reps))
     
-    mucov<-data.frame(mu=array(mean_per_condition), cov=array(sd_per_condition/mean_per_condition))
-    logMuCov <- log(mucov)
-    orderedLogMuCov <- logMuCov[order(logMuCov$mu),]
-    binmucov <- orderedLogMuCov %>% mutate(mu_bin = cut(mu, breaks=20))
-    covsList <- c()
-    sizeRDF <- input$RDFsize
-    #sample cov between each bin
-    for (i in unique(binmucov$mu_bin)){
-      nsamp <- sizeRDF
-      bin_size <- nrow(binmucov[binmucov$mu_bin==i,])
-      newsamplesize <- round((bin_size/nrow(binmucov))*nsamp)
-      covs <- sample(binmucov[binmucov$mu_bin==i,]$cov, newsamplesize, replace=T)
-      covsList <- c(covsList, covs)
-    }
     
-    #compute distribution of gene means
-    mustat <-MASS::fitdistr(rowMeans(normedCounts), "lognormal")
-    newRowMeans <- rlnorm(sizeRDF, mustat[[1]][1], mustat[[1]][2])
-    orderedNewRowMeans <- newRowMeans[order(newRowMeans)]
-    sampledMUCOV <- data.frame(cbind(log(orderedNewRowMeans), covsList))
-    colnames(sampledMUCOV) <- c("mu", "cov")
-    #generate new counts
-    drawreps <- function(mucovr, rep=4*2){
-      rnorm(n=rep, mean=exp(mucovr[1]), sd=exp(mucovr[1]+mucovr[2]))
-    }
-    RandomDF <- t(round(apply(sampledMUCOV,1, FUN=drawreps), 1))
-    RandomDF[RandomDF<0] <- 1 # convert negative counts to 1
-    
-    RandomDF <- data.frame(RandomDF)
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
-    
+
     normalizedRandomDF <- normalize(RandomDF, 
                                     countThres = input$cntThres, # update so it can deal with replicates 
                                     pseudo = input$pseudo, 
@@ -277,7 +245,7 @@ server = function(input,output, session){
     print(paste("5% FDR B_threshold B:", seq(0,4,0.001)[which.min(abs(FDRb-0.05))]))
     print(paste("5% FDR B_threshold AB:",seq(0,4,0.001)[which.min(abs(FDRab-0.05))]))
     
-    return(list(sampledMUCOV, FDRa, FDRb, FDRab))
+    return(list(sampledMuCoV, FDRa, FDRb, FDRab))
   })
   
   #returns DF with LFC, COV and FDR values

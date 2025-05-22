@@ -1,32 +1,3 @@
-geomean <- function(x){
-  exp(mean(log(x)))
-}
-
-MedianNorm <- function(data, countThres=10, pseudo=1){
-  
-  subdata = data[rowMeans(data) >= countThres,]     # Subset rows with average count higher than 10
-  subdata = subdata + pseudo                       # Add Pseudo count of 1
-  
-  t = apply(subdata, 1, geomean)         # Calculate Geometric mean
-  # Divide expression of every element per row to the geometric mean of that row
-  # Every 8 elements of Data need to be divided by an element of t
-  
-  dataRatio = log2(subdata / t)
-  T_med = apply(dataRatio, 2, median) # median per column of array
-  T_med = 2^T_med
-  C <- t(t(subdata) / T_med)
-  return(C)
-}
-
-RNAseqLowess <- function(LogIntensity, LogRatios){
-  
-  Ynorm = loess(LogRatios~LogIntensity,
-                span=0.05,degree=1,family="gaussian",
-                iterations=1,surface="direct")
-  Ratiosnorm = LogRatios - fitted(Ynorm)
-  return(Ratiosnorm)
-}
-
 compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataFrame=NULL,
                            n_replicates=2){
   

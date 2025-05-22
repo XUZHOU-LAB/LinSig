@@ -7,8 +7,26 @@ generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_data
   replicate(n_datasets, generate_synthetic_data(source_df = source_df, nrep = nrep, size = size), simplify = FALSE)
 }
 
-generate_synthetic_data <- function(source_df, size=20000, nrep=2){
-  normed <- MedianNorm(source_df[rowMeans(source_df)>10,]) # filter out low counts
+generate_synthetic_data <- function(source_df, size=20000, nrep=2,
+                                    countThres=10){
+  
+  sampledMuCoV <- generate_mucov_df(source_df=source_df,size=size,nrep=nrep,
+                                    countThres=countThres)
+  
+  # draw new counts from normal distribution using mu (row mean) and CoV
+  synthetic_dataset <- t(
+      apply(sampledMuCoV, 1, FUN=drawreps, nrep=nrep))
+  
+  
+  return(round(synthetic_dataset, 1))
+}
+
+
+
+generate_mucov_df <- function(source_df, size=20000, nrep=2,
+                                    countThres=10){
+  
+  normed <- MedianNorm(source_df, countThres = countThres) # filter out low counts
   
   col_ctrl <- 1:nrep + 0*nrep # col 1,2 if 2 replicates
   col_condA <- 1:nrep + 1*nrep # col 3,4 if 2 replicates
@@ -19,7 +37,7 @@ generate_synthetic_data <- function(source_df, size=20000, nrep=2){
   
   
   # randomly draw a coefficient of variation within a bin
-  coefs_of_variation <- sample_cov_by_binned_mu(lmucov, size=20000, n_bins=20)
+  coefs_of_variation <- sample_cov_by_binned_mu(lmucov, size=size, n_bins=20)
   
   
   # Generate new row means
@@ -33,14 +51,9 @@ generate_synthetic_data <- function(source_df, size=20000, nrep=2){
     cov = coefs_of_variation
   )
   
-  # draw new counts from normal distribution using mu (row mean) and CoV
-  synthetic_dataset <- t(
-      apply(sampledMuCoV, 1, FUN=drawreps, nrep=nrep))
   
-  
-  return(round(synthetic_dataset, 1))
+  return(sampledMuCoV)
 }
-
 
 
 
@@ -153,8 +166,3 @@ drawreps <- function(mu_cov_vec, nrep = 2) {
   random_counts[random_counts < 0] <- 1
   return(random_counts)
 }
-
-
-df <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
-dfs <- df[c(51,45,530,432,825,1034,5440),]
-gen_randomstats(df, nrep = 2, size = 20000)
