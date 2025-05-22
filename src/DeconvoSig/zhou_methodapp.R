@@ -131,7 +131,7 @@ server = function(input,output, session){
   
   
   normRatios <- eventReactive(input$deconvolute, {
-    return(normalize(inputfile(), cntThres=input$cntThres, pseudo=input$pseudo,
+    return(normalize(inputfile(), countThres=input$cntThres, pseudo=input$pseudo,
                      replicates = input$reps,
                      lowess=input$lowess))
   })
@@ -139,7 +139,7 @@ server = function(input,output, session){
   firstFilter <- reactive({
     cntMat <- base::as.matrix(inputfile()[,1:8])
     
-    DataPseudo <- MedianNorm(cntMat, CountThres=input$cntThres, pseudo=input$pseudo)
+    DataPseudo <- MedianNorm(cntMat, countThres=input$cntThres, pseudo=input$pseudo)
     F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4]) / (DataPseudo[,1] + DataPseudo[,2]))
     F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,5] + DataPseudo[,6]))
     F_ABvsA = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,3] + DataPseudo[,4]))
@@ -195,7 +195,7 @@ server = function(input,output, session){
   compFalseDisc <- eventReactive(input$compFDR, {
     #normalize countdata
     cntMat <- as.matrix(inputfile()[,1:8])
-    normedCounts <- MedianNorm(cntMat, CountThres=input$cntThres, pseudo=input$pseudo)
+    normedCounts <- MedianNorm(cntMat, countThres=input$cntThres, pseudo=input$pseudo)
     
     #compute mean/sd per condition
     mean_per_condition <- matrix(ncol=4,nrow=nrow(normedCounts))
@@ -242,7 +242,7 @@ server = function(input,output, session){
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
     
     normalizedRandomDF <- normalize(RandomDF, 
-                                    cntThres = input$cntThres, # update so it can deal with replicates 
+                                    countThres = input$cntThres, # update so it can deal with replicates 
                                     pseudo = input$pseudo, 
                                     lowess = input$lowess,
                                     replicates = 2)

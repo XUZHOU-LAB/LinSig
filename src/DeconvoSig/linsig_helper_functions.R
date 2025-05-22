@@ -5,7 +5,7 @@ geomean <- function(x){
 MedianNorm <- function(data, countThres=10, pseudo=1){
   
   subdata = data[rowMeans(data) >= countThres,]     # Subset rows with average count higher than 10
-  subdata = Subdata + pseudo                       # Add Pseudo count of 1
+  subdata = subdata + pseudo                       # Add Pseudo count of 1
   
   t = apply(subdata, 1, geomean)         # Calculate Geometric mean
   # Divide expression of every element per row to the geometric mean of that row
@@ -36,11 +36,11 @@ RNAseqLowess <- function(LogIntensity, LogRatios){
 
 
 # Function for normalization with LOWESS
-normalize <- function(inputdf, cntThres, pseudo, replicates, lowess=FALSE){
+normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
   
   print("Applying Normalisation")
   cntMat <- as.matrix(inputdf[,1:8])
-  DataPseudo <- MedianNorm(cntMat, CountThres=cntThres, pseudo=pseudo)
+  DataPseudo <- MedianNorm(cntMat, countThres=countThres, pseudo=pseudo)
   
   #automatically detect replicates?
   #replicate input number
