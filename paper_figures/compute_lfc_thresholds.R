@@ -57,7 +57,9 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
   
   
   #fit model
-  stats <- ratios.fit(rats, CompThreshold=1,n_rep=nrep)
+  stats <- ratios.fit(rats, 
+                      CompThreshold=1, ### TODO: Why hardcoded 1 here??
+                      n_rep=nrep)
   
   # Flag significant hits for A, B, and AB based on p-value and R²
   stats$SIGA  <- stats[, 6] < 0.05 & stats$R2 > 0.8

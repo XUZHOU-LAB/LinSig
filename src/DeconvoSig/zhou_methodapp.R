@@ -217,7 +217,7 @@ server = function(input,output, session){
                                     replicates = 2)
     
     modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF,
-                                      n_rep=input$reps, input$H0Thres)
+                                      n_rep=input$reps, H0_threshold=1) # why hardcoded 1 (=0) here?
     
  #modelStats[,5:8] <- calcPvalue(modelStats[,1:4], modelStats[5:8], 1)
     colnames(modelStats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
