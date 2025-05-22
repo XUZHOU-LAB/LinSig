@@ -418,7 +418,7 @@ server = function(input,output, session){
     modelTerms <- colnames(sigs[,2:4])
     clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
                     "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
-                    "T1+T2-T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
+                    "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
                     "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
                     "T1-T2+T3+", "T1-T2+T3-","no regulation")
     clusterCode <- gsub("T1", modelTerms[2], clusterCode)
@@ -451,7 +451,7 @@ server = function(input,output, session){
     cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25,0)
     clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
                     "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
-                    "T1+T2-T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
+                    "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
                     "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
                     "T1-T2+T3+", "T1-T2+T3-","no regulation")
     clusterCode <- gsub("T1", modelTerms[2], clusterCode)
@@ -466,8 +466,6 @@ server = function(input,output, session){
   })
 
   
-  
-  
   observeEvent(generateClusters(), {
     choices <- unique(generateClusters()$cluster)
     updateCheckboxGroupInput(inputId = "clusterChoice", choices = choices) 
@@ -479,6 +477,7 @@ server = function(input,output, session){
     p <- Pvalues_real()
     
     assign_genes <- function(df, B_thr=0.585, R_thr=0.8){
+      minimumGenesInClus <- 20
       print(colnames(df))
       SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
                     (abs(df[,3]) > B_thr & p[,3] < 0.05) |
@@ -491,23 +490,48 @@ server = function(input,output, session){
       sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
       clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation
       c_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
+      
        
-      clustersToInclude <- which(table(clus)>20) # parameter for minimum amount of genes in a cluster
+      clustersToInclude <- which(table(clus)>minimumGenesInClus) # parameter for minimum amount of genes in a cluster
       clustersToInclude <- names(clustersToInclude)
       
-      cc_order <- paste0("clus\n", c_order[c_order %in% clustersToInclude])
+      print(clustersToInclude)
+      
+      
       
       hmdf <- sigs[(clus %in% clustersToInclude), 2:4]
       
-      clus.split <- factor(paste0("clus\n", clus[clus %in% clustersToInclude]),
+      clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
+                      "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
+                      "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
+                      "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
+                      "T1-T2+T3+", "T1-T2+T3-")
+      
+      modelTerms <- colnames(df)[2:4]
+      clusterCode <- gsub("T1", modelTerms[2], clusterCode)
+      clusterCode <- gsub("T2", modelTerms[1], clusterCode)
+      clusterCode <- gsub("T3", modelTerms[3], clusterCode)
+      
+      clusterNames <- data.frame(clusterID = c_order,
+                                 clusterCode = clusterCode)
+
+      cc_order <- c_order[c_order %in% clustersToInclude]
+      clus.split <- factor(clus[clus %in% clustersToInclude],
                            levels=cc_order)
+      
+      geneClusters <- clusterNames$clusterCode[match(clus.split, clusterNames$clusterID)]
+      geneClusters_ord <- factor(geneClusters, level=clusterCode)
+      
       col_fun = colorRamp2(c(-2,0, 2), c("blue","white", "red"))
       
+      
       heatmap_obj <- Heatmap(as.matrix(hmdf), 
-                             split = clus.split, 
+                             split = geneClusters_ord, 
                              col = col_fun,
                              cluster_row_slices = F,
-                             cluster_columns = F)
+                             cluster_columns = F,
+                             show_row_dend = F,
+                             heatmap_legend_param = list(title = "LFC"))
       return(heatmap_obj)
     }
     heatmap_obj <- assign_genes(df, R_thr=input$R2Thres)
@@ -561,7 +585,7 @@ server = function(input,output, session){
                            ont = "BP")
       
       return(dotplot(ck,
-                     label_format = 50))
+                     label_format = 125))
     #})
   })
   
@@ -617,7 +641,7 @@ shinyApp(ui, server)
 #9	    0	  0 	 1    pHLPS+
 #12	    1	  0 	 1    LPS+pHLPS+
 #10	    0	  1 	 1    pH+pHLPS+
-#13	    1	 -1 	 1    LPS+pH-pHLPS+
+#13	    1	 -1 	 1    LPS+pH+pHLPS+
 #18	    0	  0 	-1    pHLPS-
 #24	   -1	  0 	-1    LPS-pHLPS-
 #20	    0	 -1 	-1    pH-pHLPS-
