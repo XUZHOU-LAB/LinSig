@@ -27,6 +27,69 @@ RNAseqLowess <- function(LogIntensity, LogRatios){
   return(Ratiosnorm)
 }
 
+compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataFrame=NULL,
+                           n_replicates=2){
+  
+  
+  if (typeof(structureDataFrame) == "list") {
+    col_ctrl <- structureDataFrame$col_ctrl
+    col_condA <- structureDataFrame$col_condA
+    col_condB <- structureDataFrame$col_condB
+    col_condAB<- structureDataFrame$col_condAB
+    n_replicates=length(col_ctrl)
+  }
+  else {
+    # else assume column order based on example dataset (n_replicates=2)
+    col_ctrl <- 1:n_replicates
+    col_condA <- 1:n_replicates + n_replicates
+    col_condB <- 1:n_replicates + n_replicates*2
+    col_condAB <- 1:n_replicates + n_replicates*3
+  }
+  
+  dfPseudo <- df + pseudo_count # add pseudo count to dataset
+  
+  
+  LogRatios <- matrix(nrow=nrow(dfPseudo), ncol=n_replicates*5) # initialize empty matrix
+  LogIntensity <- matrix(nrow=nrow(dfPseudo), ncol=n_replicates*5) # initialize empty matrix
+  
+  
+  # Compute log ratios
+  print("computing log ratios")
+  for (i in 1:n_replicates){
+    LogRatios[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] / dfPseudo[, col_ctrl[i]])
+    LogRatios[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condB[i]])
+    LogRatios[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] / dfPseudo[, col_ctrl[i]])
+    LogRatios[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_condA[i]])
+    LogRatios[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] / dfPseudo[, col_ctrl[i]])
+    
+    LogIntensity[,1+ (5*(i-1))] <- log2(dfPseudo[, col_condA[i]] * dfPseudo[, col_ctrl[i]])
+    LogIntensity[,2+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condB[i]])
+    LogIntensity[,3+ (5*(i-1))] <- log2(dfPseudo[, col_condB[i]] * dfPseudo[, col_ctrl[i]])
+    LogIntensity[,4+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_condA[i]])
+    LogIntensity[,5+ (5*(i-1))] <- log2(dfPseudo[, col_condAB[i]] * dfPseudo[, col_ctrl[i]])
+  }
+  n_ratios <- nrow(LogRatios)
+  
+  
+  if (!lowess_norm) { # skip ahead if no Lowess normalization
+    rownames(LogRatios) <- rownames(df)
+    return(LogRatios)
+  }
+  
+  print("Performing LOWESS normalization...")
+  normalizedRatios <- matrix(nrow = nrow(LogRatios), ncol = ncol(LogRatios))
+  #colnames(Ratios) <- col_names
+  pb <- txtProgressBar(min = 0, max = ncol(LogRatios), style = 3)
+  
+  for (i in 1:ncol(LogRatios)) {
+    normalizedRatios[, i] <- RNAseqLowess(LogIntensity[, i], LogRatios[, i])
+    setTxtProgressBar(pb, i)
+  }
+  close(pb)
+  
+  rownames(normalizedRatios) <- rownames(df)
+  return(normalizedRatios)
+}
 
 
 
@@ -42,51 +105,13 @@ normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
   cntMat <- as.matrix(inputdf[,1:8])
   DataPseudo <- MedianNorm(cntMat, countThres=countThres, pseudo=pseudo)
   
-  #automatically detect replicates?
-  #replicate input number
+  Ratios <- compute_ratios(df=DataPseudo,
+                           pseudo_count = pseudo,
+                           n_replicates=replicates,
+                           lowess_norm = lowess)
   
-  col_ctrl <- 1:replicates
-  col_condA <- 1:replicates + replicates
-  col_condB <- 1:replicates + replicates*2
-  col_condAB <- 1:replicates + replicates*3
+  return(Ratios)
   
-  LogRatios <- matrix(nrow=length(DataPseudo[,1]), ncol=replicates*5)    #empty matrix
-  for (i in 1:replicates){
-    LogRatios[,1+ (5*(i-1))] <- log2(DataPseudo[, col_condA[i]] / DataPseudo[, col_ctrl[i]])
-    LogRatios[,2+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_condB[i]])
-    LogRatios[,3+ (5*(i-1))] <- log2(DataPseudo[, col_condB[i]] / DataPseudo[, col_ctrl[i]])
-    LogRatios[,4+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_condA[i]])
-    LogRatios[,5+ (5*(i-1))] <- log2(DataPseudo[, col_condAB[i]] / DataPseudo[, col_ctrl[i]])
-  }
-  
-  if (lowess == FALSE){
-    rownames(LogRatios) <- rownames(DataPseudo)
-    return(LogRatios)
-  }
-  
-  else if (lowess == TRUE){
-    LogIntensity <- matrix(nrow=length(DataPseudo[,1]), ncol=10) #empty matrix
-    LogIntensity[,1] <- log2(DataPseudo[,3] * DataPseudo[,1])
-    LogIntensity[,2] <- log2(DataPseudo[,7] * DataPseudo[,5]) # LOWESS
-    LogIntensity[,3] <- log2(DataPseudo[,5] * DataPseudo[,1])
-    LogIntensity[,4] <- log2(DataPseudo[,7] * DataPseudo[,3])
-    LogIntensity[,5] <- log2(DataPseudo[,7] * DataPseudo[,1])
-    LogIntensity[,6] <- log2(DataPseudo[,4] * DataPseudo[,2])
-    LogIntensity[,7] <- log2(DataPseudo[,8] * DataPseudo[,6])
-    LogIntensity[,8] <- log2(DataPseudo[,6] * DataPseudo[,2])
-    LogIntensity[,9] <- log2(DataPseudo[,8] * DataPseudo[,4])
-    LogIntensity[,10] <-log2(DataPseudo[,8] * DataPseudo[,2])
-    NumRatios <- length(LogRatios[1,])
-    withProgress(message="Computing Normalized Ratios", value=0,{
-      Ratios <- matrix(ncol=10, nrow=length(LogRatios[,1]))
-      for (i in 1:NumRatios){
-        Ratios[,i] <- RNAseqLowess(LogIntensity[,i], LogRatios[,i])
-        incProgress(1 / NumRatios)
-      }
-    })
-    rownames(Ratios) <- rownames(DataPseudo)
-    return(Ratios)
-  }
 }
 
 deconvoluteFunction <- function(ratiosDF, countDF){
