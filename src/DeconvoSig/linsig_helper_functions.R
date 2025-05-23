@@ -150,7 +150,7 @@ deconvoluteFunction <- function(ratiosDF, countDF,
   modelStats <- data.frame(cbind(coefficients, Pvalue, rsquared))
 
   colnames(modelStats) <- c("int", cols[2], cols[1], cols[3], "p_int",
-                            paste0("cov_", cols[2]), paste0("cov_", cols[1]), paste0("cov_", cols[3]),
+                            paste0("p_", cols[2]), paste0("p_", cols[1]), paste0("p_", cols[3]),
                             "R2")
   
   return(round(modelStats,4))

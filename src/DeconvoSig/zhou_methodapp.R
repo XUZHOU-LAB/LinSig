@@ -43,38 +43,24 @@ ui = fluidPage(
                          "text/comma-separated-values,text/plain",
                          ".csv")),
     numericInput("reps", "Number of Replicates",
-                 value=2, min=2, step=1),
-    checkboxInput("lowess", "LOWESS Norm", value=FALSE),
-    
-    numericInput("pseudo", "Add Pseudo Count",
-                 value=1,
-                 min=0.1,
-                 step=0.5),
-    numericInput("cntThres","Count Threshold",
-                 value=10,
-                 min=0,
-                 step=0.1),
+                 value = 2, min = 2, step = 1),
+    checkboxInput("lowess", "LOWESS Norm", value = FALSE), # Kept here as per general controls
     hr(),
-    sliderInput("lfcThres", "LogFoldChange Threshold", #& qval<0.05
-                value=0.585, min=0, max=3, step=0.001),
-    sliderInput("H0Thres", "Null-Hypo Test FC Threshold",
-                value=1.5, min=1, max=4, step=0.01),
-    sliderInput("R2Thres", "R2 Threshold",
-                value=0.8, min=0.1, max=1, step=0.01),
+    sliderInput("lfcThres", "LogFoldChange Threshold",
+                value = 0.585, min = 0, max = 3, step = 0.001),
     actionButton("deconvolute", "Deconvolute Signals"),
     hr(),
     actionButton("compFDR", "Compute False Discovery Rate"),
-    numericInput("RDFsize", "Random Dataset Size",
-                 value=20000, min=10000, step=1),
-    sliderInput("FCFDR", "FC Selection for FDR",
-                value=1, min=1, max=5, step=0.01),
+    hr(), # Added for visual separation before download
     downloadButton('downloadData', 'Download Data')
   ),
   
   
   mainPanel(
-    tabsetPanel(type="tabs",
-                tabPanel("Data Table", dataTableOutput("stats"), textOutput("files"),
+    tabsetPanel(type = "tabs",
+                tabPanel("Data Table", 
+                         textOutput("files"), # Moved textOutput here for better context with table
+                         dataTableOutput("stats"), 
                          plotOutput("venn")),
                 tabPanel("R2~Beta Plots", plotOutput("betaR2")),
                 tabPanel("FDR",
@@ -86,28 +72,49 @@ ui = fluidPage(
                          verbatimTextOutput("cFDR"),
                          verbatimTextOutput("pval")),
                 tabPanel("Volcano Plots",
-                         selectInput("plottype", "Choose a plot:",
+                         selectInput("plottype", "Choose a term for Volcano Plot:",
                                      choices = c("1", "2", "3")),
-                         plotOutput('volcanoPlot', click='plot_click',
-                                    brush='plot_brush'),
+                         plotOutput('volcanoPlot', click = 'plot_click',
+                                    brush = 'plot_brush'),
                          tableOutput('clickedPoints')),
                 tabPanel("Heatmap",
                          actionButton("show_heatmap", "Generate Heatmap"),
                          htmlOutput("heatmap_output")),
                 tabPanel("Enrichment Analysis",
-                         numericInput("minimumGenesinClus", "Minimum Genes in a Cluster",
-                                      value=20, min=1, max=1000, step=1),
-                         checkboxGroupInput("clusterChoice", "Choose Cluster", choices = NA),
+                         numericInput("minimumGenesinClus", "Minimum Genes in a Cluster for GSEA",
+                                      value = 20, min = 1, max = 1000, step = 1),
+                         checkboxGroupInput("clusterChoice", "Choose Clusters for GSEA", choices = NA),
                          actionButton("actionButtonEnrich", "Start GSEA"),
-                         #dataTableOutput("clusters"),
                          plotOutput("enrichPlot")
-                        ),
+                ),
+                tabPanel("Advanced Parameters", # Maybe move some of them back to the main page?
+                         numericInput("pseudo", "Add Pseudo Count",
+                                      value = 1,
+                                      min = 0.1,
+                                      step = 0.5),
+                         numericInput("cntThres", "Count Threshold",
+                                      value = 10,
+                                      min = 0,
+                                      step = 0.1),
+                         hr(),
+                         h4("Threshold Parameters for Analysis"),
+                         sliderInput("lfcThres", "LogFoldChange Threshold",
+                                     value = 0.585, min = 0, max = 3, step = 0.001),
+                         sliderInput("H0Thres", "Null-Hypo Test FC Threshold",
+                                     value = 1.5, min = 1, max = 4, step = 0.01),
+                         sliderInput("R2Thres", "R2 Threshold",
+                                     value = 0.8, min = 0.1, max = 1, step = 0.01),
+                         hr(),
+                         h4("FDR Calculation Parameters"),
+                         numericInput("RDFsize", "Random Dataset Size for FDR",
+                                      value = 20000, min = 10000, step = 1),
+                         sliderInput("FCFDR", "FC Selection for FDR Significance",
+                                     value = 1, min = 1, max = 5, step = 0.01)
+                ),
                 tabPanel("Instructions",
                          downloadButton("downloadExample", "Download Example Dataset"),
                          includeMarkdown("./instructions.html")
-                         )
-                         
-                         
+                )
     )
   )
 )
@@ -130,10 +137,11 @@ server = function(input,output, session){
   
   
   normRatios <- eventReactive(input$deconvolute, {
-    return(normalize(inputfile(), countThres=input$cntThres, pseudo=input$pseudo,
-                     replicates = input$reps,
-                     lowess=input$lowess))
+    return(normalize(
+      inputfile(), countThres=input$cntThres, pseudo=input$pseudo,
+                     replicates = input$reps,lowess=input$lowess))
   })
+  
   # Function that filters based on q-value and Fold Change
   firstFilter <- reactive({
     cntMat <- base::as.matrix(inputfile()[,1:8])
@@ -169,14 +177,15 @@ server = function(input,output, session){
   
   sigReal <- reactive({
     real_stats <- deconvolute()
-    r2 <- real_stats$R2
-    FCFDR <- log2(input$FCFDR)
-    A <- (abs(real_stats[,2]) > FCFDR & r2 > input$R2Thres & real_stats[,6] < 0.05)
-    B <- (abs(real_stats[,3]) > FCFDR & r2 > input$R2Thres & real_stats[,7] < 0.05)
-    AB <- (abs(real_stats[,4]) > FCFDR & r2 > input$R2Thres & real_stats[,8]< 0.05)
+    A <- (abs(real_stats[,2]) > log2(input$FCFDR) &
+            real_stats$R2 > input$R2Thres & real_stats[,6] < 0.05)
+    B <- (abs(real_stats[,3]) > log2(input$FCFDR) &
+            real_stats$R2 > input$R2Thres & real_stats[,7] < 0.05)
+    AB <- (abs(real_stats[,4]) > log2(input$FCFDR) &
+             real_stats$R2 > input$R2Thres & real_stats[,8]< 0.05)
+    
     print(paste("real A|B|AB:", sum(A|B|AB)))
     print(paste("A B AB", sum(A), sum(B), sum(AB)))
-    
     return(list(A, B, AB))
   })
   
@@ -564,7 +573,6 @@ server = function(input,output, session){
       
       return(dotplot(ck,
                      label_format = 125))
-    #})
   })
   
   output$enrichPlot <- renderPlot({
