@@ -198,11 +198,8 @@ server = function(input,output, session){
     sampledMuCoV <- generate_mucov_df(cntMat, size=input$RDFsize, nrep=input$reps,
                                       countThres=input$cntThres)
     
-
     # draw new counts from normal distribution using mu (row mean) and CoV
-    RandomDF <- t(
-      apply(sampledMuCoV, 1, FUN=drawreps, nrep=input$reps))
-    
+    RandomDF <- t(apply(sampledMuCoV, 1, FUN=drawreps, nrep=input$reps))
     
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
 
@@ -216,33 +213,18 @@ server = function(input,output, session){
                                       n_rep=input$reps, H0_threshold=1) # why hardcoded 1 (=0) here?
     # I guess because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
     
-    colnames(modelStats)[5:8] <- c("p_int", "p_B", "p_A", "p_AB")
+    FDRA <- modelStats[modelStats[,7] < 0.05 & modelStats$R2 > 0.8,] # make these parameters move with regular model parameters?
+    FDRB <- modelStats[modelStats[,6] < 0.05 & modelStats$R2 > 0.8,] # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
+    FDRAB<- modelStats[modelStats[,8] < 0.05 & modelStats$R2 > 0.8,]
+   
+    xs <- seq(0,4,0.001) # TODO: make generic parameter
+    FDRa <- sapply(xs, function(t) mean(abs(FDRA$A) > t)) # for each LFC check if above threshold 0-4
+    FDRb <- sapply(xs, function(t) mean(abs(FDRB$B) > t)) # will generate a for each threshold a percentage of genes above it
+    FDRab <- sapply(xs, function(t) mean(abs(FDRAB$AB) > t)) # where this threshold is 5%, its the accepted FDR value
     
-    modelStats$SIGB <- modelStats[,6] < 0.05 & modelStats$R2 > 0.8 # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
-    modelStats$SIGA <- modelStats[,7] < 0.05 & modelStats$R2 > 0.8
-    modelStats$SIGAB <-modelStats[,8] < 0.05 & modelStats$R2 > 0.8
-    FDRA <- modelStats[modelStats$SIGA,]
-    FDRB <- modelStats[modelStats$SIGB,]
-    FDRAB<- modelStats[modelStats$SIGAB,]
-    
-    
-    FDRab <- FDRb <- FDRa <- c()
-    for (i in 1:length(seq(0,4,0.001))){
-      FDRab[i] <- mean(abs(FDRAB$AB)>(seq(0,4,0.001)[i]))
-    }
-    for (i in 1:length(seq(0,4,0.001))){
-      FDRb[i] <- mean(abs(FDRB$B)>(seq(0,4,0.001)[i]))
-    }
-    for (i in 1:length(seq(0,4,0.001))){
-      FDRa[i] <- mean(abs(FDRA$A)>(seq(0,4,0.001)[i]))
-    }
-    xs <- seq(0,4,0.001)
-    FDRDF <- data.frame("Xs"=xs, "FDRa"=FDRa,"FDRb"=FDRb, "FDRab"=FDRab)
-    # replace which.min with NearestNeighbours function
-    print(paste("5% FDR B_threshold A:", seq(0,4,0.001)[which.min(abs(FDRa-0.05))]))
-    print(paste("5% FDR B_threshold B:", seq(0,4,0.001)[which.min(abs(FDRb-0.05))]))
-    print(paste("5% FDR B_threshold AB:",seq(0,4,0.001)[which.min(abs(FDRab-0.05))]))
-    
+    print(paste("5% FDR LFC threshold A:", NearestNeighbours(FDRa, xs, 0.05)))
+    print(paste("5% FDR LFC threshold B:", NearestNeighbours(FDRb, xs, 0.05)))
+    print(paste("5% FDR LFC threshold AB:", NearestNeighbours(FDRab, xs, 0.05)))
     
     return(list(sampledMuCoV, FDRa, FDRb, FDRab))
   })
