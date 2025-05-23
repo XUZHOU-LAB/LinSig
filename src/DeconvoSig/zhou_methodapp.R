@@ -1,5 +1,3 @@
-
-
 library(DT)
 library(ggplot2)
 library(ggpubr)
@@ -167,19 +165,9 @@ server = function(input,output, session){
     deconvoluteFunction(normRatios()[firstFilter(),], inputfile(), 
                         n_rep=input$reps, input$H0Thres)
   })
-  
-  #returns Pvalues based on LFC and COVs
-  Pvalues_real <- reactive({
-    real_stats <- deconvolute()
-    p <- real_stats[,5:8]
-    print(paste("real", sum(rowSums(p <= 0.05) > 0)))
-    print(sum(rowSums(p > 0.5) > 0))
-    colnames(p) <- paste0("p_", colnames(p))
-    return(p)
-  })
+
   
   sigReal <- reactive({
-    #Pvalues <- Pvalues_real()
     real_stats <- deconvolute()
     r2 <- real_stats$R2
     FCFDR <- log2(input$FCFDR)
@@ -256,8 +244,6 @@ server = function(input,output, session){
     decoDF <- deconvolute()
     sigReal <- sigReal()
     boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
-    decoDF[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
-    colnames(decoDF)[6:8] <- colnames(Pvalues_real())[2:4]
     
     #after FDR computation
     FDRa_dist <- compFalseDisc()[[2]]
@@ -345,11 +331,10 @@ server = function(input,output, session){
   # Volcano Plots
   output$volcanoPlot <- renderPlot({
     modelStats <- deconvolute()
-    Pvals <- Pvalues_real()
     ptype <- as.character(input$plottype)
     
     X=modelStats[,(as.integer(ptype)+1)]
-    Y=Pvals[,(as.integer(ptype)+1)]
+    Y=modelStats[,(as.integer(ptype)+1+4)]
     
     ggplot()+
       geom_point(aes(x=X, y=Y))+
@@ -363,10 +348,13 @@ server = function(input,output, session){
   # Click function for Volcano Plot
   clicked <- reactive({
     modelStats <- deconvolute()
-    Pvals <- Pvalues_real()
     ptype <- as.character(input$plottype)
-    df <- data.frame(cbind(modelStats[,2:4], Pvals[,2:4]))
-    ggdf <- data.frame(X=modelStats[,(as.integer(ptype)+1)], Y=Pvals[,(as.integer(ptype)+1)])
+    df <- data.frame(cbind(modelStats[,2:4], modelStats[,6:8]))
+    
+    X=modelStats[,(as.integer(ptype)+1)]   # columns 2,3,4 for LFC
+    Y=modelStats[,(as.integer(ptype)+1+4)] # columns 6,7,8 for P-values
+    
+    ggdf <- data.frame(x=X,y=Y) 
     ggdf <- cbind(ggdf, df)
     brushedPoints(ggdf, input$plot_brush)
   })
@@ -378,12 +366,6 @@ server = function(input,output, session){
   
   # Render Table of all Genes
   output$stats <- renderDT({
-    # sigReal <- sigReal()
-    # boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
-    # df <- deconvolute()
-    # df[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
-    # colnames(df)[6:8] <- colnames(Pvalues_real())[2:4]
-    
     df <- getSignificantOutputTable()
     round(df, digits=4)
     df$cluster <- generateClusters1()
@@ -394,9 +376,6 @@ server = function(input,output, session){
     sigReal <- sigReal()
     boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
     df <- deconvolute()
-    df[,c(5,6,7,8)] <- Pvalues_real()[,c(1,2,3,4)]
-    print(Pvalues_real()[1:4,])
-    colnames(df)[5:8] <- colnames(Pvalues_real())[1:4]
     df <- df[boolfilt,c(1,2,3,4,5,6,7,8,9)]
   })
   
@@ -476,7 +455,7 @@ server = function(input,output, session){
   #Render Heatmap Function
   HDF <- reactive({ 
     df <- deconvolute()
-    p <- Pvalues_real()
+    p <- df[,5:8]
     
     assign_genes <- function(df, B_thr=0.585, R_thr=0.8){
       minimumGenesInClus <- 20
@@ -553,8 +532,6 @@ server = function(input,output, session){
           decoDF <- deconvolute()
           sigReal <- sigReal()
           boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
-          decoDF[,c(6,7,8)] <- Pvalues_real()[,c(2,3,4)]
-          colnames(decoDF)[6:8] <- colnames(Pvalues_real())[2:4]
           filteredDF <- round(decoDF[boolfilt,c(1,2,3,4,6,7,8,9)], digits=6)
           return(filteredDF)
           
@@ -566,7 +543,6 @@ server = function(input,output, session){
   )
   
   startGSEA <- eventReactive(input$actionButtonEnrich, {
-    #output$enrichPlot <- renderPlot({
       clusterDT <- generateClusters()
       clusterDT <- clusterDT[clusterDT$cluster %in% input$clusterChoice,]
       
