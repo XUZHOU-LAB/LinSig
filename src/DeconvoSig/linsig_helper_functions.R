@@ -81,25 +81,66 @@ normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
                            n_replicates=replicates,
                            lowess_norm = lowess)
   
+  print(head(Ratios))
   return(Ratios)
   
 }
 
-deconvoluteFunction <- function(ratiosDF, countDF, 
-                                n_rep, H0_threshold){
-  ratios <- ratiosDF
+deconvoluteFunction <- function(countDF, countThres,
+                                n_rep, H0_threshold,
+                                pseudo, lowess=F){
   
-  n_samples = ncol(ratios)
+  ratios <- normalize(countDF, countThres = countThres,
+                      pseudo=pseudo, replicates=n_rep,
+                      lowess=lowess)
   
+  modelStats <- ratios.fit(ratios=ratios, 
+                          CompThreshold=H0_threshold,
+                          n_rep=n_rep)
   
-  strucvec <- rep(c(0,1,0, # creates a matrix for X in y ~ X. X is dependent on number of replicates
-                    0,1,1, # 5 rows in X for each replicate
-                    1,0,0,
-                    1,0,1,
-                    1,1,1), times = n_samples/5)
+  colnames(modelStats) <- get_colnames(countDF)
+  return(round(modelStats, 5))
+}
+
+
+get_colnames <- function(df){
+  #get column data
+  cc <- strsplit(colnames(df)[1:8], "_") # change to 4*n_replicates
+  cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
+  column_names <- c("int", cols[2], cols[1], cols[3], "p_int",
+                            paste0("p_", cols[2]), paste0("p_", cols[1]), paste0("p_", cols[3]),
+                            "R2")
+  return(column_names)
+}
+
+
+NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
+  loc <- which.min(abs(x-abs(i)))
+  return(y[loc])
+}
+
+# Plotting function
+plotLFC_R2 <- function(dat, x, y, sigs, xlab) {
+  ggplot(dat, aes(x = .data[[x]], y = .data[[y]])) +
+    geom_point() +
+    geom_point(data = dat[sigs, ], color = "blue") +
+    coord_cartesian(xlim = c(-5, 5)) +
+    labs(x = xlab, y = y)
+}
+
+
+
+ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
   
-  
-  X <- matrix(strucvec, ncol=3, byrow=T)
+  message("fitting model...")
+  # Generate structural vector and design matrix
+  n_samples <- n_rep*5 # TODO: n_samples defined twice?
+  strucvec <- rep(c(0,1,0, 
+                    0,1,1, 
+                    1,0,0, 
+                    1,0,1, 
+                    1,1,1), times = n_rep)
+  X <- matrix(strucvec, ncol = 3, byrow = TRUE)
   
   # Fit multivariate linear model
   multiplefit <- lm(t(ratios) ~ X)
@@ -128,45 +169,15 @@ deconvoluteFunction <- function(ratiosDF, countDF,
   coefficients <- t(multiplefit$coefficients)
   covB <- as.data.frame(covB)
   
-  
-  # Calculate P-values
   n_samples <- 4*n_rep
   n_var <- 3
   DoF <- n_samples - n_var - 1
-  ttest_stat <- (abs(coefficients) - log2(H0_threshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
+  ttest_stat <- (abs(coefficients) - log2(CompThreshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
   ttest_stat <- data.frame(ttest_stat)
   
   Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
-  
-  
-  #get column data
-  cc <- strsplit(colnames(countDF)[1:8], "_") # change to 4*n_replicates
-  print(cc)
-  cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
-  print(cols)
-  
-  
-  
-  modelStats <- data.frame(cbind(coefficients, Pvalue, rsquared))
 
-  colnames(modelStats) <- c("int", cols[2], cols[1], cols[3], "p_int",
-                            paste0("p_", cols[2]), paste0("p_", cols[1]), paste0("p_", cols[3]),
-                            "R2")
-  
-  return(round(modelStats,4))
-}
-
-
-NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
-  loc <- which.min(abs(x-abs(i)))
-  return(y[loc])
-}
-
-# Plotting function
-plotLFC_R2 <- function(dat, x, y, sigs, xlab) {
-  ggplot(dat, aes(x = .data[[x]], y = .data[[y]])) +
-    geom_point() +
-    geom_point(data = dat[sigs, ], color = "blue") +
-    coord_cartesian(xlim = c(-5, 5)) +
-    labs(x = xlab, y = y)
+  outputdf <- data.frame(cbind(coefficients,Pvalue,rsquared))
+  colnames(outputdf)[9] <- "R2"
+  return(outputdf)
 }

@@ -24,11 +24,20 @@ source("./gen_synthetic_data_helpers.R")
 #options(repos = BiocManager::repositories())
 
 #TODO
-# MULTIPLE REPLICATES
 # colnames error message -> column name function to apply everywhere
 # fix up heatmap functions repetition (improve speed?)
-# remove LOWESS option
+# remove LOWESS option (or keep?)
 # Use ratios.fit function instead of custom deconvoluteFunc
+# Add GSEA download results + speed up
+
+#TODO:
+# gneratate cluster funcite vervangen door gneratecluster1 - niet essentieel
+# dotplot size aanpassen? - niet essentieel
+# outputCSV werkend maken met en zonder FDR - nodig.
+# Background Genes? - niet nodig. standaard is genoeg
+
+# MULTIPLE REPLICATES (difficult)
+
 
 ###################################################
 ########## U S E R   I N T E R F A C E ############
@@ -57,7 +66,6 @@ ui = fluidPage(
   mainPanel(
     tabsetPanel(type = "tabs",
                 tabPanel("Data Table", 
-                         textOutput("files"), # Moved textOutput here for better context with table
                          dataTableOutput("stats"), 
                          plotOutput("venn")),
                 tabPanel("R2~Beta Plots", plotOutput("betaR2")),
@@ -132,13 +140,6 @@ server = function(input,output, session){
     return(df)
   })
   
-  
-  normRatios <- eventReactive(input$deconvolute, {
-    return(normalize(
-      inputfile(), countThres=input$cntThres, pseudo=input$pseudo,
-                     replicates = input$reps,lowess=input$lowess))
-  })
-  
   # Function that filters based on q-value and Fold Change
   firstFilter <- reactive({
     inputdf <- inputfile()
@@ -152,7 +153,7 @@ server = function(input,output, session){
     
     Fold <- data.frame(F_AvsC, F_ABvsB, F_ABvsA, F_BvsC)
     
-    if (ncol(inputdf) != input$reps*4){ # optional q-values filtering
+    if (ncol(inputdf) != input$reps*4){ # optional q-values filtering, if no q-values provided assume q_val=0
       inputdf[,9:12] <- 0
     }
     
@@ -160,15 +161,18 @@ server = function(input,output, session){
     countthresholdFilter <- rownames(DataPseudo)
     qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,]
     
+    # grab all genes that have a higher foldchange than lfcThres and have a significant q-value for at least one of the conditions.
     SignificantGenesIDX = rowSums(abs(Fold[,1:4]) >= input$lfcThres & qvalDF <= 0.05)>0
     
     return(SignificantGenesIDX)
   })
   
+
   deconvolute <- eventReactive(input$deconvolute, {
     sigGenes <- firstFilter()
-    deconvoluteFunction(normRatios()[sigGenes,], inputfile(), 
-                        n_rep=input$reps, input$H0Thres)
+    deconvoluteFunction(inputfile(), input$cntThres,
+                        n_rep=input$reps, input$H0Thres,
+                        pseudo=input$pseudo, lowess=input$lowess)
   })
 
   
@@ -184,7 +188,6 @@ server = function(input,output, session){
     print(paste("real A|B|AB:", sum(A|B|AB)))
     print(paste("A B AB", sum(A), sum(B), sum(AB)))
     
-    #col_func
     return(list("A"=A, "B"=B, "AB"=AB))
   })
   
@@ -202,14 +205,9 @@ server = function(input,output, session){
     
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
 
-    normalizedRandomDF <- normalize(RandomDF, 
-                                    countThres = input$cntThres, # update so it can deal with replicates 
-                                    pseudo = input$pseudo, 
-                                    lowess = input$lowess,
-                                    replicates = 2)
-    
-    modelStats <- deconvoluteFunction(normalizedRandomDF, RandomDF,
-                                      n_rep=input$reps, H0_threshold=1) # why hardcoded 1 (=0) here?
+    modelStats <- deconvoluteFunction(RandomDF, input$cntThres,
+                                      n_rep=input$reps, H0_threshold=1,
+                                      pseudo=input$pseudo, lowess=input$lowess) # why hardcoded 1 (=0) here?
     # I guess because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
     
     FDRA <- modelStats[modelStats[,7] < 0.05 & modelStats$R2 > 0.8,] # make these parameters move with regular model parameters?
@@ -312,10 +310,7 @@ server = function(input,output, session){
     
   },width=400, height=400)
   
-  output$files <- renderText({
-    paste("Number of genes after Count Threshold:", length(normRatios()[,1]))
-  })
-  
+
   # Volcano Plots
   output$volcanoPlot <- renderPlot({
     modelStats <- deconvolute()
@@ -323,8 +318,6 @@ server = function(input,output, session){
     
     X=modelStats[,(as.integer(ptype)+1)] # lfc values
     Y=modelStats[,(as.integer(ptype)+1+4)] # pvalues
-    
-    #col_func
     
     ggplot()+
       geom_point(aes(x=X, y=Y))+
@@ -403,13 +396,7 @@ server = function(input,output, session){
     return(clusterDF)
   })
   
-  #TODO:
-  # gneratate cluster funcite vervangen door gneratecluster1 - niet essentieel
-  # dotplot size aanpassen? - niet essentieel
-  # outputCSV werkend maken met en zonder FDR - nodig.
-  # Background Genes? - niet nodig. standaard is genoeg
 
-  
   generateClusters1 <- reactive({
     decoDF <- getSignificantOutputTable()
     sts <- sign(decoDF[,2:4])*(decoDF[,6:8]<0.05)

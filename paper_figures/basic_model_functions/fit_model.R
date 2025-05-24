@@ -9,12 +9,12 @@ ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
   
   message("fitting model...")
   # Generate structural vector and design matrix
-  n_samples <- ncol(ratios) # TODO: n_samples defined twice?
+  n_samples <- n_rep*5 # TODO: n_samples defined twice?
   strucvec <- rep(c(0,1,0, 
                     0,1,1, 
                     1,0,0, 
                     1,0,1, 
-                    1,1,1), times = n_samples/5)
+                    1,1,1), times = n_rep)
   X <- matrix(strucvec, ncol = 3, byrow = TRUE)
   
   # Fit multivariate linear model
