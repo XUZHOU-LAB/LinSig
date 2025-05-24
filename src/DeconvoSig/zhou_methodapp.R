@@ -362,138 +362,51 @@ server = function(input,output, session){
     df <- df[boolfilt,c(1,2,3,4,5,6,7,8,9)]
   })
   
+
   generateClusters <- reactive({
-  
-    minGenesInCluster = input$minimumGenesinClus
-
     sigs <- getSignificantOutputTable()
+    minGenes <- input$minimumGenesinClus
     
-    sts <- sign(sigs[,2:4])*(sigs[,6:8]<0.05)
-    sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
-    clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation 1:LPS, 3:pH, 9:pHLPS
-    cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25,0)
-
-    clustersToInclude <- which(table(clus)>minGenesInCluster) # parameter for minimum amount of genes in a cluster
-    clustersToInclude <- names(clustersToInclude)
+    beta_cols <- 2:4
+    qval_cols <- 6:8
+    clus <- get_cluster_labels(sigs, beta_cols, qval_cols)
     
-    clusterDF <- sigs[(clus %in% clustersToInclude), 2:4]
-    geneClusters <- clus[clus %in% clustersToInclude]
+    included <- names(which(table(clus) > minGenes))
+    clusterDF <- sigs[clus %in% included, beta_cols]
+    geneClusters <- clus[clus %in% included]
     
-    modelTerms <- colnames(sigs[,2:4]) #col_func
-    clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
-                    "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
-                    "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
-                    "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
-                    "T1-T2+T3+", "T1-T2+T3-","no regulation")
-    clusterCode <- gsub("T1", modelTerms[2], clusterCode)
-    clusterCode <- gsub("T2", modelTerms[1], clusterCode)
-    clusterCode <- gsub("T3", modelTerms[3], clusterCode)
+    modelTerms <- colnames(sigs)[beta_cols]
+    clusterNames <- get_cluster_code_mapping(modelTerms)
+    clusterDF$cluster <- clusterNames$clusterCode[match(geneClusters, clusterNames$clusterID)]
     
-    clusterNames <- data.frame(clusterID = cluster_order,
-                               clusterCode = clusterCode)
-    geneClusters <- clusterNames$clusterCode[match(geneClusters, clusterNames$clusterID)]
-    clusterDF$cluster <- geneClusters
     return(clusterDF)
   })
   
-
   generateClusters1 <- reactive({
-    decoDF <- getSignificantOutputTable()
-    sts <- sign(decoDF[,2:4])*(decoDF[,6:8]<0.05)
-
-    sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
-    clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation 1:LPS, 3:pH, 9:pHLPS
+    df <- getSignificantOutputTable()
+    beta_cols <- 2:4
+    qval_cols <- 6:8
+    clus <- get_cluster_labels(df, beta_cols, qval_cols)
     
-    modelTerms <- colnames(decoDF[,2:4]) # replace pH / LPS etc with model terms
-    
-    cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25,0)
-    clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
-                    "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
-                    "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
-                    "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
-                    "T1-T2+T3+", "T1-T2+T3-","no regulation")
-    clusterCode <- gsub("T1", modelTerms[2], clusterCode)
-    clusterCode <- gsub("T2", modelTerms[1], clusterCode)
-    clusterCode <- gsub("T3", modelTerms[3], clusterCode)
-    
-    clusterNames <- data.frame(clusterID = cluster_order,
-                               clusterCode = clusterCode)
+    modelTerms <- colnames(df)[beta_cols]
+    clusterNames <- get_cluster_code_mapping(modelTerms)
     geneClusters <- clusterNames$clusterCode[match(clus, clusterNames$clusterID)]
-
+    
     return(geneClusters)
   })
-
+  
+  HDF <- reactive({ 
+    df <- deconvolute()
+    p <- df[, 5:8]
+    
+    heatmap_obj <- assign_genes(df, R_thr = input$R2Thres)
+    return(heatmap_obj)
+  })
+  
   
   observeEvent(generateClusters(), {
     choices <- unique(generateClusters()$cluster)
     updateCheckboxGroupInput(inputId = "clusterChoice", choices = choices) 
-  })
-  
-  #Render Heatmap Function
-  HDF <- reactive({ 
-    df <- deconvolute()
-    p <- df[,5:8]
-    
-    assign_genes <- function(df, B_thr=0.585, R_thr=0.8){
-      minimumGenesInClus <- 20
-      print(colnames(df))
-      SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
-                    (abs(df[,3]) > B_thr & p[,3] < 0.05) |
-                    (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2>R_thr
-      print(paste("Significant Genes: ", sum(SIG_genes)))
-      df[,6:8] <- p[,2:4]
-      sigs <- df[SIG_genes,]
-      
-      sts <- sign(sigs[,2:4])*(sigs[,6:8]<0.05)
-      sts[sts==-1] <- 2 # positive reg 1, negative reg 2, no reg, 0
-      clus <- rowSums(t(t(sts)*c(1,3,9))) # generate 26 unique cluster labels based on regulation
-      c_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,24,20,26,4,5,7,8,14,23,16,25)
-      
-       
-      clustersToInclude <- which(table(clus)>minimumGenesInClus) # parameter for minimum amount of genes in a cluster
-      clustersToInclude <- names(clustersToInclude)
-      
-      print(clustersToInclude)
-      
-      
-      
-      hmdf <- sigs[(clus %in% clustersToInclude), 2:4]
-      
-      clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
-                      "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
-                      "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
-                      "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
-                      "T1-T2+T3+", "T1-T2+T3-")
-      
-      modelTerms <- colnames(df)[2:4]
-      clusterCode <- gsub("T1", modelTerms[2], clusterCode)
-      clusterCode <- gsub("T2", modelTerms[1], clusterCode)
-      clusterCode <- gsub("T3", modelTerms[3], clusterCode)
-      
-      clusterNames <- data.frame(clusterID = c_order,
-                                 clusterCode = clusterCode)
-
-      cc_order <- c_order[c_order %in% clustersToInclude]
-      clus.split <- factor(clus[clus %in% clustersToInclude],
-                           levels=cc_order)
-      
-      geneClusters <- clusterNames$clusterCode[match(clus.split, clusterNames$clusterID)]
-      geneClusters_ord <- factor(geneClusters, level=clusterCode)
-      
-      col_fun = colorRamp2(c(-2,0, 2), c("blue","white", "red"))
-      
-      
-      heatmap_obj <- Heatmap(as.matrix(hmdf), 
-                             split = geneClusters_ord, 
-                             col = col_fun,
-                             cluster_row_slices = F,
-                             cluster_columns = F,
-                             show_row_dend = F,
-                             heatmap_legend_param = list(title = "LFC"))
-      return(heatmap_obj)
-    }
-    heatmap_obj <- assign_genes(df, R_thr=input$R2Thres)
-    return(heatmap_obj)
   })
   
   output$downloadData <- downloadHandler(
