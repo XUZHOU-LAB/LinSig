@@ -1,16 +1,15 @@
 library(DT)
 library(ggplot2)
-library(ggpubr)
 library(dplyr)
 library(BiocManager)
-library(circlize)
+library(circlize) # for colorRamp2 function
 library(ComplexHeatmap)
 library(InteractiveComplexHeatmap)
-library(RColorBrewer)
+#library(RColorBrewer)
 library(ggvenn)
 library(patchwork)
 
-
+# GSEA libraries
 library(AnnotationDbi)
 library("org.Mm.eg.db")
 library(clusterProfiler)
@@ -317,7 +316,7 @@ server = function(input,output, session){
   },width=400, height=400)
   
   output$files <- renderText({
-    paste("Number of genes after Count Threshold:", nrow(normRatios()))
+    paste("Number of genes after Count Threshold:", length(normRatios()[,1]))
   })
   
   # Volcano Plots
