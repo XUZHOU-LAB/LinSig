@@ -185,8 +185,8 @@ ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
 ## Heatmap functions
 
 # Generate cluster labels (encoded integers)
-get_cluster_labels <- function(df, beta_cols, qval_cols) {
-  sts <- sign(df[, beta_cols]) * (df[, qval_cols] < 0.05)
+get_cluster_labels <- function(df) {
+  sts <- sign(df[, 2:4]) * (df[, 6:8] < 0.05)
   sts[sts == -1] <- 2
   rowSums(t(t(sts) * c(1, 3, 9)))  # 1:LPS, 3:pH, 9:pHLPS
 }
@@ -208,23 +208,18 @@ get_cluster_code_mapping <- function(modelTerms) {
 
 assign_genes <- function(df, B_thr = 0.585, R_thr = 0.8) {
   minimumGenesInClus <- 20
-  p <- df[, 5:8]
+
+  SIG_genes <- ((abs(df[,2]) > B_thr & df[,6] < 0.05) |
+                  (abs(df[,3]) > B_thr & df[,7] < 0.05) |
+                  (abs(df[,4]) > B_thr & df[,8] < 0.05)) & df$R2 > R_thr
   
-  beta_cols <- 2:4
-  qval_cols <- 6:8
-  
-  SIG_genes <- ((abs(df[,2]) > B_thr & p[,2] < 0.05) |
-                  (abs(df[,3]) > B_thr & p[,3] < 0.05) |
-                  (abs(df[,4]) > B_thr & p[,4] < 0.05)) & df$R2 > R_thr
-  
-  df[, qval_cols] <- p[,2:4]
   sigs <- df[SIG_genes, ]
   
-  clus <- get_cluster_labels(sigs, beta_cols, qval_cols)
+  clus <- get_cluster_labels(sigs)
   included <- names(which(table(clus) > minimumGenesInClus))
   
-  hmdf <- sigs[clus %in% included, beta_cols]
-  modelTerms <- colnames(df)[beta_cols]
+  hmdf <- sigs[clus %in% included, 2:4]
+  modelTerms <- colnames(df)[2:4]
   clusterNames <- get_cluster_code_mapping(modelTerms)
   
   c_order <- clusterNames$clusterID

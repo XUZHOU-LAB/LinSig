@@ -347,13 +347,6 @@ server = function(input,output, session){
     clicked()[,3:8]
   }, rownames=T, digits=4)
   
-  # Render Table of all Genes
-  output$stats <- renderDT({
-    df <- getSignificantOutputTable()
-    round(df, digits=4)
-    df$cluster <- generateClusters1()
-    df[,c(1:4,6:10)]
-  })
   
   getSignificantOutputTable <- reactive({ # add these stats to the full table?
     sigReal <- sigReal()
@@ -362,38 +355,14 @@ server = function(input,output, session){
     df <- df[boolfilt,c(1,2,3,4,5,6,7,8,9)]
   })
   
-
-  generateClusters <- reactive({
-    sigs <- getSignificantOutputTable()
-    minGenes <- input$minimumGenesinClus
-    
-    beta_cols <- 2:4
-    qval_cols <- 6:8
-    clus <- get_cluster_labels(sigs, beta_cols, qval_cols)
-    
-    included <- names(which(table(clus) > minGenes))
-    clusterDF <- sigs[clus %in% included, beta_cols]
-    geneClusters <- clus[clus %in% included]
-    
-    modelTerms <- colnames(sigs)[beta_cols]
-    clusterNames <- get_cluster_code_mapping(modelTerms)
-    clusterDF$cluster <- clusterNames$clusterCode[match(geneClusters, clusterNames$clusterID)]
-    
-    return(clusterDF)
+  # Render Table of all Genes
+  output$stats <- renderDT({
+    df <- getSignificantOutputTable()
+    round(df, digits=4)
+    df$cluster <- generateClusters1()
+    df[,c(1:4,6:10)]
   })
   
-  generateClusters1 <- reactive({
-    df <- getSignificantOutputTable()
-    beta_cols <- 2:4
-    qval_cols <- 6:8
-    clus <- get_cluster_labels(df, beta_cols, qval_cols)
-    
-    modelTerms <- colnames(df)[beta_cols]
-    clusterNames <- get_cluster_code_mapping(modelTerms)
-    geneClusters <- clusterNames$clusterCode[match(clus, clusterNames$clusterID)]
-    
-    return(geneClusters)
-  })
   
   HDF <- reactive({ 
     df <- deconvolute()
@@ -403,6 +372,34 @@ server = function(input,output, session){
     return(heatmap_obj)
   })
   
+  generateClusters <- reactive({
+    sigs <- getSignificantOutputTable()
+    minGenes <- input$minimumGenesinClus
+
+    clus <- get_cluster_labels(sigs)
+    
+    included <- names(which(table(clus) > minGenes))
+    clusterDF <- sigs[clus %in% included, 2:4]
+    geneClusters <- clus[clus %in% included]
+    
+    modelTerms <- colnames(sigs)[2:4]
+    clusterNames <- get_cluster_code_mapping(modelTerms)
+    clusterDF$cluster <- clusterNames$clusterCode[match(geneClusters, clusterNames$clusterID)]
+    
+    return(clusterDF)
+  })
+  
+  generateClusters1 <- reactive({
+    df <- getSignificantOutputTable()
+
+    clus <- get_cluster_labels(df)
+    
+    modelTerms <- colnames(df)[2:4]
+    clusterNames <- get_cluster_code_mapping(modelTerms)
+    geneClusters <- clusterNames$clusterCode[match(clus, clusterNames$clusterID)]
+    
+    return(geneClusters)
+  })
   
   observeEvent(generateClusters(), {
     choices <- unique(generateClusters()$cluster)
@@ -447,7 +444,7 @@ server = function(input,output, session){
         clusterList[[cluster]] <- entrezInCluster
       }
 
-      ck <- compareCluster(geneCluster = clusterList, 
+      ck <- compareCluster(geneCluster = clusterList, # this function is slow (100s)
                            fun = enrichGO, 
                            OrgDb = org.Mm.eg.db, 
                            ont = "BP")
