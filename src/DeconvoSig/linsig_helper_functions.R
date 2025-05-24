@@ -161,3 +161,12 @@ NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
   loc <- which.min(abs(x-abs(i)))
   return(y[loc])
 }
+
+# Plotting function
+plotLFC_R2 <- function(dat, x, y, sigs, xlab) {
+  ggplot(dat, aes(x = .data[[x]], y = .data[[y]])) +
+    geom_point() +
+    geom_point(data = dat[sigs, ], color = "blue") +
+    coord_cartesian(xlim = c(-5, 5)) +
+    labs(x = xlab, y = y)
+}

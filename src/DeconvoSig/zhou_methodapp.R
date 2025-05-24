@@ -8,6 +8,8 @@ library(ComplexHeatmap)
 library(InteractiveComplexHeatmap)
 library(RColorBrewer)
 library(ggvenn)
+library(patchwork)
+
 
 library(AnnotationDbi)
 library("org.Mm.eg.db")
@@ -162,13 +164,14 @@ server = function(input,output, session){
     countthresholdFilter <- rownames(DataPseudo)
     qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,]
     
-    SigIDX = rowSums(abs(Fold[,1:4]) >= input$lfcThres & qvalDF <= 0.05)>0
+    SignificantGenesIDX = rowSums(abs(Fold[,1:4]) >= input$lfcThres & qvalDF <= 0.05)>0
     
-    return(SigIDX)
+    return(SignificantGenesIDX)
   })
   
   deconvolute <- eventReactive(input$deconvolute, {
-    deconvoluteFunction(normRatios()[firstFilter(),], inputfile(), 
+    sigGenes <- firstFilter()
+    deconvoluteFunction(normRatios()[sigGenes,], inputfile(), 
                         n_rep=input$reps, input$H0Thres)
   })
 
@@ -184,7 +187,9 @@ server = function(input,output, session){
     
     print(paste("real A|B|AB:", sum(A|B|AB)))
     print(paste("A B AB", sum(A), sum(B), sum(AB)))
-    return(list(A, B, AB))
+    
+    #col_func
+    return(list("A"=A, "B"=B, "AB"=AB))
   })
   
   #returns LFC distribution of deconvoluted random genes
@@ -255,13 +260,12 @@ server = function(input,output, session){
   output$venn <- renderPlot({
     df <- sigReal()
     # use data frame as input
-    modelStats <- deconvolute()
-    cols <- colnames(modelStats)[2:4]
-    
-    M <-tibble(value=1:length(df[[1]]), 'A'= df[[1]],
-               'B'= df[[2]],
+    modelStats <- deconvolute() # col_func
+
+    M <-tibble('A' = df[[1]],
+               'B' = df[[2]],
                'AB'= df[[3]])
-    names(M)[2:4] <- cols
+    names(M) <- colnames(modelStats)[2:4]
     # create Venn diagram and display all sets
     ggvenn(M, fill_color=c("blue","red", "purple"), fill_alpha=0.25)
   })
@@ -270,23 +274,22 @@ server = function(input,output, session){
   output$betaR2 <- renderPlot({
     modelStats <- deconvolute()
     sigReal <- sigReal()
-    cols <- colnames(modelStats)[2:4]
+    cols <- colnames(modelStats)[2:4] # Typically A, B, AB col_func
     R2 <- modelStats$R2
     
-    plotFun <- function(dat, x, y, sigs){
-      ggplot(dat, aes(x=.data[[x]], y=.data[[y]])) +
-        geom_point() +
-        geom_point(data=dat[sigs,], color="blue")+
-        coord_cartesian(xlim=c(-5,5))
-    }
+    # Generate individual plots
+    A_plot  <- plotLFC_R2(dat = modelStats, x = cols[1], y = "R2", sigs = sigReal[[1]], xlab=paste("LFC", cols[1]))
+    B_plot  <- plotLFC_R2(dat = modelStats, x = cols[2], y = "R2", sigs = sigReal[[2]], xlab=paste("LFC", cols[2]))
+    AB_plot <- plotLFC_R2(dat = modelStats, x = cols[3], y = "R2", sigs = sigReal[[3]], xlab=paste("LFC", cols[3]))
     
-    A <- plotFun(dat=modelStats, x=cols[1], y="R2", sigs=sigReal[[1]])
-    B <- plotFun(dat=modelStats, x=cols[2], y="R2", sigs=sigReal[[2]])
-    AB <-plotFun(dat=modelStats, x=cols[3], y="R2", sigs=sigReal[[3]])
+    # Combine using patchwork
+    combined_plot <- (A_plot | B_plot | AB_plot) +
+      plot_annotation(
+        title = "Betas after LFC > X and qval < 0.05 Selection",
+        theme = theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
+      )
     
-    plot <- ggpubr::ggarrange(A, B, AB, ncol=3)
-    annotate_figure(plot, top=text_grob("Betas after LFC>X and qval<0.05 Selection"))
-    plot
+    combined_plot
   })
   
   # Mean ~ Variation Plot of Random Data
@@ -314,7 +317,7 @@ server = function(input,output, session){
   },width=400, height=400)
   
   output$files <- renderText({
-    paste("Number of genes after Count Threshold:", length(normRatios()[,1]))
+    paste("Number of genes after Count Threshold:", nrow(normRatios()))
   })
   
   # Volcano Plots
@@ -324,6 +327,8 @@ server = function(input,output, session){
     
     X=modelStats[,(as.integer(ptype)+1)]
     Y=modelStats[,(as.integer(ptype)+1+4)]
+    
+    #col_func
     
     ggplot()+
       geom_point(aes(x=X, y=Y))+
@@ -361,7 +366,7 @@ server = function(input,output, session){
     df[,c(1:4,6:10)]
   })
   
-  getSignificantOutputTable <- reactive({
+  getSignificantOutputTable <- reactive({ # add these stats to the full table?
     sigReal <- sigReal()
     boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
     df <- deconvolute()
@@ -385,7 +390,7 @@ server = function(input,output, session){
     clusterDF <- sigs[(clus %in% clustersToInclude), 2:4]
     geneClusters <- clus[clus %in% clustersToInclude]
     
-    modelTerms <- colnames(sigs[,2:4])
+    modelTerms <- colnames(sigs[,2:4]) #col_func
     clusterCode = c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
                     "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
                     "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
