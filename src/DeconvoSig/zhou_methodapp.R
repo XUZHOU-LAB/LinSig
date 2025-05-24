@@ -127,11 +127,10 @@ ui = fluidPage(
 server = function(input,output, session){
   
   options(shiny.maxRequestSize=20*1024^2) #20MB max file size
+  
   inputfile <- reactive({
     req(input$df)
-    df <- read.csv(input$df$datapath,
-                   header = T,
-                   row.names = 1)
+    df <- read.csv(input$df$datapath, header = T, row.names = 1)
     return(df)
   })
   
@@ -144,9 +143,10 @@ server = function(input,output, session){
   
   # Function that filters based on q-value and Fold Change
   firstFilter <- reactive({
-    cntMat <- base::as.matrix(inputfile()[,1:8])
+    inputdf <- inputfile()
     
-    DataPseudo <- MedianNorm(cntMat, countThres=input$cntThres, pseudo=input$pseudo)
+    DataPseudo <- MedianNorm(base::as.matrix(inputdf[,1:8]), countThres=input$cntThres, pseudo=input$pseudo)
+    
     F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4]) / (DataPseudo[,1] + DataPseudo[,2]))
     F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,5] + DataPseudo[,6]))
     F_ABvsA = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,3] + DataPseudo[,4]))
@@ -154,13 +154,11 @@ server = function(input,output, session){
     
     Fold <- data.frame(F_AvsC, F_ABvsB, F_ABvsA, F_BvsC)
     
-    inputdataset <- inputfile() # needs DOCUMENTATION
-    if (ncol(inputfile() != input$replicates*4)){ # optional q-values filtering
-      inputdataset <- inputfile()
-      inputdataset[,9:12] <- 0
-      
+    if (ncol(inputdf) != input$reps*4){ # optional q-values filtering
+      inputdf[,9:12] <- 0
     }
-    qvals <- inputdataset[,9:12]
+    
+    qvals <- inputdf[,9:12]
     countthresholdFilter <- rownames(DataPseudo)
     qvalDF <- qvals[rownames(qvals) %in% countthresholdFilter,]
     
