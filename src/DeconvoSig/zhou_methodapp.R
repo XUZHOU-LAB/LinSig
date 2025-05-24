@@ -24,14 +24,11 @@ source("./gen_synthetic_data_helpers.R")
 #options(repos = BiocManager::repositories())
 
 #TODO
-# colnames error message -> ?
-# remove LOWESS option 
-
-#TODO 
 # MULTIPLE REPLICATES
-# edit FDR calculation so it can deal with multiple reps
-# edit P value so it can deal with multiple replicates
-# column name grabber function maken. At least edit to use multiple replicates
+# colnames error message -> column name function to apply everywhere
+# fix up heatmap functions repetition (improve speed?)
+# remove LOWESS option
+# Use ratios.fit function instead of custom deconvoluteFunc
 
 ###################################################
 ########## U S E R   I N T E R F A C E ############
@@ -249,7 +246,7 @@ server = function(input,output, session){
     decoDF[,10] <- FDR_A
     decoDF[,11] <- FDR_B
     decoDF[,12] <- FDR_AB
-    colnames(decoDF)[10:12] <- paste0("FDR_", colnames(decoDF[,2:4]))
+    colnames(decoDF)[10:12] <- paste0("FDR_", colnames(decoDF[,2:4])) # col_func
     filteredDF <- round(decoDF[boolfilt,c(1,2,3,4,6,7,8,9,10,11,12)], digits=6)
     
     return(filteredDF)
@@ -324,8 +321,8 @@ server = function(input,output, session){
     modelStats <- deconvolute()
     ptype <- as.character(input$plottype)
     
-    X=modelStats[,(as.integer(ptype)+1)]
-    Y=modelStats[,(as.integer(ptype)+1+4)]
+    X=modelStats[,(as.integer(ptype)+1)] # lfc values
+    Y=modelStats[,(as.integer(ptype)+1+4)] # pvalues
     
     #col_func
     
