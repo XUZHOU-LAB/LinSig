@@ -24,16 +24,12 @@ source("./gen_synthetic_data_helpers.R")
 #options(repos = BiocManager::repositories())
 
 #TODO
-# colnames error message -> column name function to apply everywhere
-# fix up heatmap functions repetition (improve speed?)
 # remove LOWESS option (or keep?)
-# Use ratios.fit function instead of custom deconvoluteFunc
 # Add GSEA download results + speed up
 
 #TODO:
-# gneratate cluster funcite vervangen door gneratecluster1 - niet essentieel
 # dotplot size aanpassen? - niet essentieel
-# outputCSV werkend maken met en zonder FDR - nodig.
+# outputCSV werkend maken met en zonder FDR - nodig. (add FDR function to analyze model since its quick enough)
 # Background Genes? - niet nodig. standaard is genoeg
 
 # MULTIPLE REPLICATES (difficult)
@@ -214,14 +210,13 @@ server = function(input,output, session){
     FDRB <- modelStats[modelStats[,6] < 0.05 & modelStats$R2 > 0.8,] # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
     FDRAB<- modelStats[modelStats[,8] < 0.05 & modelStats$R2 > 0.8,]
    
-    xs <- seq(0,4,0.001) # TODO: make generic parameter
-    FDRa <- sapply(xs, function(t) mean(abs(FDRA$A) > t)) # for each LFC check if above threshold 0-4
-    FDRb <- sapply(xs, function(t) mean(abs(FDRB$B) > t)) # will generate a for each threshold a percentage of genes above it
-    FDRab <- sapply(xs, function(t) mean(abs(FDRAB$AB) > t)) # where this threshold is 5%, its the accepted FDR value
+    FDRa <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRA$A) > t)) # for each LFC check if above threshold 0-4
+    FDRb <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRB$B) > t)) # will generate a for each threshold a percentage of genes above it
+    FDRab <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRAB$AB) > t)) # where this threshold is 5%, its the accepted FDR value
     
-    print(paste("5% FDR LFC threshold A:", NearestNeighbours(FDRa, xs, 0.05)))
-    print(paste("5% FDR LFC threshold B:", NearestNeighbours(FDRb, xs, 0.05)))
-    print(paste("5% FDR LFC threshold AB:", NearestNeighbours(FDRab, xs, 0.05)))
+    print(paste("5% FDR LFC threshold A:", NearestNeighbours(FDRa, params$lfc_thresholds, 0.05)))
+    print(paste("5% FDR LFC threshold B:", NearestNeighbours(FDRb, params$lfc_thresholds, 0.05)))
+    print(paste("5% FDR LFC threshold AB:", NearestNeighbours(FDRab, params$lfc_thresholds, 0.05)))
     
     return(list(sampledMuCoV, FDRa, FDRb, FDRab))
   })
@@ -300,12 +295,12 @@ server = function(input,output, session){
     FDRa <- compFalseDisc()[[3]]
     FDRab <-compFalseDisc()[[4]]
     
-    plot(seq(0,4,0.001), FDRab, log='x', type='l', col='green',lwd=1.5,
+    plot(params$lfc_thresholds, FDRab, log='x', type='l', col='green',lwd=1.5,
          xlim=c(0.001,2), ylim=c(0,0.99),
          xlab="Fold change", ylab="Probability of FDR",
          main="Distribution of False Discoveries over Fold Changes")
-    lines(seq(0,4,0.001), FDRb, log='x', type='l', col='orange',lwd=1.5)
-    lines(seq(0,4,0.001), FDRa, log='x', type='l', col='blue',lwd=1.5)
+    lines(params$lfc_thresholds, FDRb, log='x', type='l', col='orange',lwd=1.5)
+    lines(params$lfc_thresholds, FDRa, log='x', type='l', col='blue',lwd=1.5)
     abline(h=0.05, col="red", lwd=2)
     
   },width=400, height=400)
@@ -315,14 +310,13 @@ server = function(input,output, session){
   output$volcanoPlot <- renderPlot({
     modelStats <- deconvolute()
     ptype <- as.character(input$plottype)
-    
-    X=modelStats[,(as.integer(ptype)+1)] # lfc values
-    Y=modelStats[,(as.integer(ptype)+1+4)] # pvalues
-    
+
     ggplot()+
-      geom_point(aes(x=X, y=Y))+
+      geom_point(aes(x=modelStats[,(as.integer(ptype)+1)], # lfc values
+                     y=modelStats[,(as.integer(ptype)+1+4)] # pvalues
+                     ))+
       scale_y_continuous(trans="log10")+
-      xlab(colnames(modelStats[as.integer(ptype)+1])) + ylab("log P-value")+
+      xlab(colnames(modelStats[as.integer(ptype)+1])) + ylab("log P-value")+ # do something
       ggtitle(paste0("Volcano Plot of ", colnames(modelStats[as.integer(ptype)+1])), " Induced Genes")+
       theme(plot.title = element_text(size = 20, face = "bold"))
     
@@ -333,13 +327,12 @@ server = function(input,output, session){
     modelStats <- deconvolute()
     ptype <- as.character(input$plottype)
     df <- data.frame(cbind(modelStats[,2:4], modelStats[,6:8]))
-    
-    X=modelStats[,(as.integer(ptype)+1)]   # columns 2,3,4 for LFC
-    Y=modelStats[,(as.integer(ptype)+1+4)] # columns 6,7,8 for P-values
-    
-    ggdf <- data.frame(x=X,y=Y) 
+
+    ggdf <- data.frame(x=modelStats[,(as.integer(ptype)+1)],   # columns 2,3,4 for LFC
+                       y=modelStats[,(as.integer(ptype)+1+4)] # columns 6,7,8 for P-values
+                       ) 
     ggdf <- cbind(ggdf, df)
-    brushedPoints(ggdf, input$plot_brush)
+    brushedPoints(ggdf, input$plot_brush, xvar = "x", yvar = "y")
   })
   
   # Render table of selected genes in Volcano Plot

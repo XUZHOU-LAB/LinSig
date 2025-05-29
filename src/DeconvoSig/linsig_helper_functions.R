@@ -1,3 +1,7 @@
+params <- new.env(parent = emptyenv())
+params$lfc_thresholds <- seq(0,4,0.001)
+
+
 compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataFrame=NULL,
                            n_replicates=2){
   
