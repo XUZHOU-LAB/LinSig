@@ -26,7 +26,7 @@ source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
 source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R")
 
 cts <- read.csv("~/Boston Internship/Github/Rsyn/paper_figures/IL6IL10combDF.csv", row.names=1)[,1:8]
-cts <- read.csv("~/Boston Internship/Subdata_cts_q.csv", row.names=1)[,1:8]
+#cts <- read.csv("~/Boston Internship/Subdata_cts_q.csv", row.names=1)[,1:8]
 dim(cts)
 #### Functions ####
 
@@ -120,10 +120,10 @@ for (i in 1:params$n_synth_dfs){
   interaction_threshold <- lfc_thresholds["AB",]$Threshold_at_5pct
   main_threshold <- lfc_thresholds["B",]$Threshold_at_5pct
   
-  o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3) > interaction_threshold)#, na.rm=T)
-  o4s<- (GTstat[sampledRows,]$cov_x3<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X3)>interaction_threshold)#, na.rm=T)
-  o3 <- (GTstat$cov_x2<0.05 & GTstat$R2>0.8 & abs(GTstat$X2) >  main_threshold)#, na.rm=T)
-  o3s<- (GTstat[sampledRows,]$cov_x2<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X2)>main_threshold)#, na.rm=T)
+  o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3) > interaction_threshold)
+  o4s<- (GTstat[sampledRows,]$cov_x3<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X3)>interaction_threshold)
+  o3 <- (GTstat$cov_x2<0.05 & GTstat$R2>0.8 & abs(GTstat$X2) >  main_threshold)
+  o3s<- (GTstat[sampledRows,]$cov_x2<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X2)>main_threshold)
 
   
   FDRv <- data.frame("FDR" = c((sum(o4, na.rm=T)-sum(o4s, na.rm=T))/sum(o4, na.rm=T),
@@ -296,7 +296,7 @@ allSensVarLFC <- combine_data("sen_lfc_df")
 ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   geom_point(aes(shape=term), size=2)+
   scale_shape_manual(values=c(21, 22, 24)) +
-  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.7,0.99))+
+  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.5,0.99))+
   xlab("Sensitivity") +
   stat_ellipse(geom="polygon", level=0.95, aes(fill=method), alpha=0.25)
 

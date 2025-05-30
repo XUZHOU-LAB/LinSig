@@ -112,5 +112,5 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
 
 
 #test function
-#cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
-#compute_lfc_thresholds(source_df = cts, nrep=2)
+cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
+compute_lfc_thresholds(source_df = cts, size=40000, nrep=2)

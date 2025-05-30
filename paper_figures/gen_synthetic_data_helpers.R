@@ -33,6 +33,8 @@ generate_synthetic_data <- function(source_df, size=20000, nrep=2){
     cov = coefs_of_variation
   )
   
+  plot(sampledMuCoV$mu, sampledMuCoV$cov, pch='.')
+  
   # draw new counts from normal distribution using mu (row mean) and CoV
   synthetic_dataset <- t(
       apply(sampledMuCoV, 1, FUN=drawreps, nrep=nrep))
