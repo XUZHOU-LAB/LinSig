@@ -4,12 +4,12 @@
 \alias{MedianNorm}
 \title{Median Normalization of the data}
 \usage{
-MedianNorm(data, countthres = 10, pseudo = 1)
+MedianNorm(data, count_threshold = 10, pseudo = 1)
 }
 \arguments{
 \item{data}{Use a count matrix K_ij, with one row for each gene i and one column for each sample j. Matrix entries indicate the number of sequencing reads mapped to a gene in a sample.}
 
-\item{countthres}{Count threshold for the count data. Default is 10}
+\item{count_threshold}{Count threshold for the count data. Default is 10}
 
 \item{pseudo}{Pseudo count added to deal with zero count problem. Default is 1}
 }

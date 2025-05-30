@@ -1,6 +1,6 @@
 library(dplyr)
 library(MASS)
-source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R")
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R")
 
 # Generate multiple synthetic datasets
 generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_datasets = 10) {
@@ -153,8 +153,3 @@ drawreps <- function(mu_cov_vec, nrep = 2) {
   random_counts[random_counts < 0] <- 1
   return(random_counts)
 }
-
-
-df <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
-dfs <- df[c(51,45,530,432,825,1034,5440),]
-gen_randomstats(df, nrep = 2, size = 20000)

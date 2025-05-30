@@ -1,9 +1,9 @@
 library(dplyr)
 library(MASS)
-library(cellsigsyn)
-source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
+#library(cellsigsyn)
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
-source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R") # for RNAseqLowess function
 library(parallel)
 
 
