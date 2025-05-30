@@ -1,40 +1,17 @@
 library(dplyr)
 library(MASS)
-source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R")
-
+source("./basic_model_functions/data_standardization.R")
 
 # Generate multiple synthetic datasets
-generate_multiple_datasets <- function(source_df, nrep = 2, size = 40000, n_datasets = 10) {
+generate_multiple_datasets <- function(source_df, nrep = 2, size, n_datasets = 10) {
   replicate(n_datasets, generate_synthetic_data(source_df = source_df, nrep = nrep, size = size), simplify = FALSE)
 }
 
-generate_synthetic_data <- function(source_df, size=20000, nrep=2){
-  normed <- MedianNorm(source_df[rowMeans(source_df)>10,]) # filter out low counts
+generate_synthetic_data <- function(source_df, size, nrep=2,
+                                    countThres=10){
   
-  col_ctrl <- 1:nrep + 0*nrep # col 1,2 if 2 replicates
-  col_condA <- 1:nrep + 1*nrep # col 3,4 if 2 replicates
-  col_condB <- 1:nrep + 2*nrep  # col 5,6 if 2 replicates
-  col_condAB <- 1:nrep + 3*nrep  # col 7,8 if 2 replicates
-  
-  lmucov <- compute_log_mu_cov(normed, nrep=nrep)
-  
-  
-  # randomly draw a coefficient of variation within a bin
-  coefs_of_variation <- sample_cov_by_binned_mu(lmucov, size=20000, n_bins=20)
-  
-  
-  # Generate new row means
-  mustat          <- MASS::fitdistr(rowMeans(normed), "lognormal")
-  new_row_means   <- rlnorm(size, mustat$estimate[1], mustat$estimate[2])
-  onrm            <- sort(new_row_means)
-  
-  
-  sampledMuCoV <- data.frame(
-    mu  = log(onrm),
-    cov = coefs_of_variation
-  )
-  
-  plot(sampledMuCoV$mu, sampledMuCoV$cov, pch='.')
+  sampledMuCoV <- generate_mucov_df(source_df=source_df,size=size,nrep=nrep,
+                                    countThres=countThres)
   
   # draw new counts from normal distribution using mu (row mean) and CoV
   synthetic_dataset <- t(
@@ -44,6 +21,34 @@ generate_synthetic_data <- function(source_df, size=20000, nrep=2){
   return(round(synthetic_dataset, 1))
 }
 
+
+
+generate_mucov_df <- function(source_df, size, nrep=2,
+                                    countThres=10, n_bins=20){
+  
+  normed <- MedianNorm(source_df, countThres = countThres) # filter out low counts
+  
+  col_ctrl <- 1:nrep + 0*nrep # col 1,2 if 2 replicates
+  col_condA <- 1:nrep + 1*nrep # col 3,4 if 2 replicates
+  col_condB <- 1:nrep + 2*nrep  # col 5,6 if 2 replicates
+  col_condAB <- 1:nrep + 3*nrep  # col 7,8 if 2 replicates
+  
+  lmucov <- compute_log_mu_cov(normed, nrep=nrep)
+  
+  # randomly draw a coefficient of variation within a bin
+  coefs_of_variation <- sample_cov_by_binned_mu(lmucov, size=size, n_bins=n_bins)
+  
+  # Generate new row means
+  mustat          <- MASS::fitdistr(rowMeans(normed), "lognormal")
+  new_row_means   <- rlnorm(size, mustat$estimate[1], mustat$estimate[2])
+  onrm            <- sort(new_row_means)
+  
+  sampledMuCoV <- data.frame(
+    mu  = log(onrm),
+    cov = coefs_of_variation)
+  
+  return(sampledMuCoV)
+}
 
 
 
@@ -111,7 +116,7 @@ compute_log_mu_cov <- function(df, nrep = 2) {
 }
 
 
-sample_cov_by_binned_mu <- function(log_mucov_df, size = 20000, n_bins = 20) {
+sample_cov_by_binned_mu <- function(log_mucov_df, size, n_bins) {
   # Ensure mu column is sorted
   
   sorted_df <- log_mucov_df[order(log_mucov_df$mu), ]
@@ -133,11 +138,11 @@ sample_cov_by_binned_mu <- function(log_mucov_df, size = 20000, n_bins = 20) {
   
 
   # Ensure exactly `size` values
-  if (length(ncovs) > 20000) {
-    ncovs <- ncovs[seq_len(20000)]
-  } else if (length(ncovs) < 20000) {
+  if (length(ncovs) > size) {
+    ncovs <- ncovs[seq_len(size)]
+  } else if (length(ncovs) < size) {
     # if too few, sample additional with replacement from itself
-    ncovs <- c(ncovs, sample(ncovs, 20000 - length(ncovs), replace = TRUE))
+    ncovs <- c(ncovs, sample(ncovs, size - length(ncovs), replace = TRUE))
   }
   
   return(unname(ncovs))
