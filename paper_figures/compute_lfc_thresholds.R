@@ -1,9 +1,9 @@
 library(dplyr)
 library(MASS)
-library(cellsigsyn)
-source("~/Boston Internship/Github/Rsyn/paper_figures/data_standardization.R") # for MedianNorm function
+#library(cellsigsyn)
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
-source("~/Boston Internship/cellsigsyn/R/compute_ratios.R") # for RNAseqLowess function
+source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R") # for RNAseqLowess function
 library(parallel)
 
 
@@ -114,5 +114,5 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
 
 
 #test function
-#cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
-#compute_lfc_thresholds(source_df = cts, nrep=2)
+cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
+compute_lfc_thresholds(source_df = cts, size=40000, nrep=2)
