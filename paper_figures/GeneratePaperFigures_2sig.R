@@ -367,7 +367,7 @@ sampledRows <- gt_df$ground_truth_data$sampled_rows
 fit_intmodel <- function(counts, meanThr=10, pseudo=1, lowess=FALSE, nrep=2,
                          FDR_pval=0.05, sizeRDF=60000, structureDataFrame){
   
-  normed <- MedianNorm(counts, countthres = meanThr, pseudo = pseudo)
+  normed <- MedianNorm(counts, count_threshold = meanThr, pseudo = pseudo)
   rats <- compute_ratios(normed, lowess_norm = F, structureDataFrame = structureDataFrame)
   fitstats <- ratios.fit(rats, CompThreshold = 1, n_rep=nrep) # compute model statistics
   

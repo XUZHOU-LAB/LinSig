@@ -74,11 +74,11 @@ compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataF
 
 
 # Function for normalization with LOWESS
-normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
+normalize <- function(inputdf, count_threshold, pseudo, replicates, lowess=FALSE){
   
   print("Applying Normalisation")
   cntMat <- as.matrix(inputdf[,1:8])
-  DataPseudo <- MedianNorm(cntMat, countThres=countThres, pseudo=pseudo)
+  DataPseudo <- MedianNorm(cntMat, count_threshold=count_threshold, pseudo=pseudo)
   
   Ratios <- compute_ratios(df=DataPseudo,
                            pseudo_count = pseudo,
@@ -89,11 +89,11 @@ normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
   
 }
 
-deconvoluteFunction <- function(countDF, countThres,
+deconvoluteFunction <- function(countDF, count_threshold,
                                 n_rep, H0_threshold,
                                 pseudo, lowess=F){
   
-  ratios <- normalize(countDF, countThres = countThres,
+  ratios <- normalize(countDF, count_threshold = count_threshold,
                       pseudo=pseudo, replicates=n_rep,
                       lowess=lowess)
   

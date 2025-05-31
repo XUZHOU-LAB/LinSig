@@ -109,7 +109,7 @@ ui = fluidPage(
                          hr(),
                          h4("FDR Calculation Parameters"),
                          numericInput("RDFsize", "Random Dataset Size for FDR",
-                                      value = 20000, min = 10000, step = 1),
+                                      value = 40000, min = 10000, step = 1),
                          sliderInput("FCFDR", "FC Selection for FDR Significance",
                                      value = 1, min = 1, max = 5, step = 0.01)
                 ),
@@ -140,7 +140,7 @@ server = function(input,output, session){
   firstFilter <- reactive({
     inputdf <- inputfile()
     
-    DataPseudo <- MedianNorm(base::as.matrix(inputdf[,1:8]), countThres=input$cntThres, pseudo=input$pseudo)
+    DataPseudo <- MedianNorm(base::as.matrix(inputdf[,1:8]), count_threshold=input$cntThres, pseudo=input$pseudo)
     
     F_AvsC = log2((DataPseudo[,3] + DataPseudo[,4]) / (DataPseudo[,1] + DataPseudo[,2]))
     F_ABvsB = log2((DataPseudo[,7] + DataPseudo[,8]) / (DataPseudo[,5] + DataPseudo[,6]))
@@ -194,7 +194,7 @@ server = function(input,output, session){
     
     # generate dataframe with mean row ~ coefficient of variation (between replicates)
     sampledMuCoV <- generate_mucov_df(cntMat, size=input$RDFsize, nrep=input$reps,
-                                      countThres=input$cntThres)
+                                      count_threshold=input$cntThres)
     
     # draw new counts from normal distribution using mu (row mean) and CoV
     RandomDF <- t(apply(sampledMuCoV, 1, FUN=drawreps, nrep=input$reps))
