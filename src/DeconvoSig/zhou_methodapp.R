@@ -1,3 +1,7 @@
+# for deploying paste in R console:
+#library(BiocManager)
+#options(repos = BiocManager::repositories())
+
 library(DT)
 library(ggplot2)
 library(dplyr)
@@ -19,20 +23,20 @@ library(markdown)
 source("./linsig_helper_functions.R")
 source("./gen_synthetic_data_helpers.R")
 
-# for deploying paste in R console:
-#library(BiocManager)
-#options(repos = BiocManager::repositories())
 
-#TODO
-# remove LOWESS option (or keep?)
+#TODO: high priority
 # Add GSEA download results + speed up
+# Add Cluster assignment in download
 
-#TODO:
-# dotplot size aanpassen? - niet essentieel
+#TODO: normal priority
 # outputCSV werkend maken met en zonder FDR - nodig. (add FDR function to analyze model since its quick enough)
 # Background Genes? - niet nodig. standaard is genoeg
 
+# TODO: low priority
+# remove LOWESS option (or keep?)
 # MULTIPLE REPLICATES (difficult)
+# dotplot size aanpassen? - niet essentieel
+
 
 
 ###################################################
