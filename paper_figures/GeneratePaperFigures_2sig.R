@@ -5,6 +5,9 @@
 # Create Random Dataset with Ground Truth 
 # analyse like normal
 
+# TODO: One fit function (reuse fit_model func?)
+# so you dont need to do all the normalisation and compute ratios steps manually
+
 ########################################
 # G E N E R A T E   R A N D O M    D F #
 ########################################
