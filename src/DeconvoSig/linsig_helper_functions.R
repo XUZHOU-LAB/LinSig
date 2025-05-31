@@ -91,7 +91,8 @@ normalize <- function(inputdf, count_threshold, pseudo, replicates, lowess=FALSE
 
 deconvoluteFunction <- function(countDF, count_threshold,
                                 n_rep, H0_threshold,
-                                pseudo, lowess=F){
+                                pseudo, lowess=F, 
+                                beta_threshold, r2_threshold){
   
   ratios <- normalize(countDF, count_threshold = count_threshold,
                       pseudo=pseudo, replicates=n_rep,
@@ -102,7 +103,19 @@ deconvoluteFunction <- function(countDF, count_threshold,
                           n_rep=n_rep)
   
   colnames(modelStats) <- get_colnames(countDF)
-  return(round(modelStats, 5))
+  
+  A <- (abs(modelStats[,2]) > log2(beta_threshold) &
+          modelStats$R2 > r2_threshold & modelStats[,6] < 0.05)
+  B <- (abs(modelStats[,3]) > log2(beta_threshold) &
+          modelStats$R2 > r2_threshold & modelStats[,7] < 0.05)
+  AB <- (abs(modelStats[,4]) > log2(beta_threshold) &
+           modelStats$R2 > r2_threshold & modelStats[,8]< 0.05)
+  
+  modelStats$isSignificantA <- A
+  modelStats$isSignificantB <- B
+  modelStats$isSignificantAB <- AB
+  
+  return(modelStats)
 }
 
 

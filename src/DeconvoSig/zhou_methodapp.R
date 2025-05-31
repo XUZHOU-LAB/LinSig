@@ -170,27 +170,14 @@ server = function(input,output, session){
   
 
   deconvolute <- eventReactive(input$deconvolute, {
-    sigGenes <- firstFilter()
+    sigGenes <- firstFilter() # implement maybe as optional since we also have the FDR filter?
+    # TODO: what to do with firstFilter? now its not being used...
     deconvoluteFunction(inputfile(), input$cntThres,
                         n_rep=input$reps, input$H0Thres,
-                        pseudo=input$pseudo, lowess=input$lowess)
+                        pseudo=input$pseudo, lowess=input$lowess,
+                        beta_threshold=input$FCFDR, r2_threshold=input$R2Thres)
   })
-
   
-  sigReal <- reactive({
-    real_stats <- deconvolute()
-    A <- (abs(real_stats[,2]) > log2(input$FCFDR) &
-            real_stats$R2 > input$R2Thres & real_stats[,6] < 0.05)
-    B <- (abs(real_stats[,3]) > log2(input$FCFDR) &
-            real_stats$R2 > input$R2Thres & real_stats[,7] < 0.05)
-    AB <- (abs(real_stats[,4]) > log2(input$FCFDR) &
-             real_stats$R2 > input$R2Thres & real_stats[,8]< 0.05)
-    
-    print(paste("real A|B|AB:", sum(A|B|AB)))
-    print(paste("A B AB", sum(A), sum(B), sum(AB)))
-    
-    return(list("A"=A, "B"=B, "AB"=AB))
-  })
   
   #returns LFC distribution of deconvoluted random genes
   compFalseDisc <- eventReactive(input$compFDR, {
@@ -208,13 +195,16 @@ server = function(input,output, session){
 
     modelStats <- deconvoluteFunction(RandomDF, input$cntThres,
                                       n_rep=input$reps, H0_threshold=1,
-                                      pseudo=input$pseudo, lowess=input$lowess) # why hardcoded 1 (=0) here?
+                                      pseudo=input$pseudo, lowess=input$lowess,
+                                      beta_threshold=1,
+                                      r2_threshold=input$R2Thres) # why hardcoded 1 (=0) here?
     # I guess because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
-    
-    FDRA <- modelStats[modelStats[,7] < 0.05 & modelStats$R2 > 0.8,] # make these parameters move with regular model parameters?
-    FDRB <- modelStats[modelStats[,6] < 0.05 & modelStats$R2 > 0.8,] # 0.7 for adjusted R2, 0.8 for Multiple Rsquared
-    FDRAB<- modelStats[modelStats[,8] < 0.05 & modelStats$R2 > 0.8,]
    
+    FDRA <- modelStats[modelStats$isSignificantA==T,]
+    FDRB <- modelStats[modelStats$isSignificantB==T,]
+    FDRAB <- modelStats[modelStats$isSignificantAB==T,]
+    
+    
     FDRa <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRA$A) > t)) # for each LFC check if above threshold 0-4
     FDRb <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRB$B) > t)) # will generate a for each threshold a percentage of genes above it
     FDRab <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRAB$AB) > t)) # where this threshold is 5%, its the accepted FDR value
@@ -230,13 +220,14 @@ server = function(input,output, session){
   joinFDRandGenes <- reactive({
     #after deconvolute button
     decoDF <- deconvolute()
-    sigReal <- sigReal()
-    boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
+    boolfilt <- decoDF$isSignificantA | decoDF$isSignificantB | decoDF$isSignificantAB
+    
+    fdr_df <- compFalseDisc()
     
     #after FDR computation
-    FDRa_dist <- compFalseDisc()[[2]]
-    FDRb_dist <- compFalseDisc()[[3]]
-    FDRab_dist<- compFalseDisc()[[4]]
+    FDRa_dist <- fdr_df[[2]]
+    FDRb_dist <- fdr_df[[3]]
+    FDRab_dist<- fdr_df[[4]]
     xs <- seq(0,4,0.001)
     FDR_A <- sapply(decoDF[,2], NearestNeighbours, x=xs, y=FDRa_dist)
     FDR_B <- sapply(decoDF[,3], NearestNeighbours, x=xs, y=FDRb_dist)
@@ -252,14 +243,12 @@ server = function(input,output, session){
   
   # VENN DIAGRAM
   output$venn <- renderPlot({
-    df <- sigReal()
-    # use data frame as input
-    modelStats <- deconvolute() # col_func
+    df <- deconvolute()
 
-    M <-tibble('A' = df[[1]],
-               'B' = df[[2]],
-               'AB'= df[[3]])
-    names(M) <- colnames(modelStats)[2:4]
+    M <-tibble('A' = df$isSignificantA,
+               'B' = df$isSignificantB,
+               'AB'= df$isSignificantAB)
+    names(M) <- colnames(df)[2:4]
     # create Venn diagram and display all sets
     ggvenn(M, fill_color=c("blue","red", "purple"), fill_alpha=0.25)
   })
@@ -267,14 +256,13 @@ server = function(input,output, session){
   # Beta vs R2 Plot 
   output$betaR2 <- renderPlot({
     modelStats <- deconvolute()
-    sigReal <- sigReal()
     cols <- colnames(modelStats)[2:4] # Typically A, B, AB col_func
     R2 <- modelStats$R2
     
     # Generate individual plots
-    A_plot  <- plotLFC_R2(dat = modelStats, x = cols[1], y = "R2", sigs = sigReal[[1]], xlab=paste("LFC", cols[1]))
-    B_plot  <- plotLFC_R2(dat = modelStats, x = cols[2], y = "R2", sigs = sigReal[[2]], xlab=paste("LFC", cols[2]))
-    AB_plot <- plotLFC_R2(dat = modelStats, x = cols[3], y = "R2", sigs = sigReal[[3]], xlab=paste("LFC", cols[3]))
+    A_plot  <- plotLFC_R2(dat = modelStats, x = cols[1], y = "R2", sigs = modelStats$isSignificantA, xlab=paste("LFC", cols[1]))
+    B_plot  <- plotLFC_R2(dat = modelStats, x = cols[2], y = "R2", sigs = modelStats$isSignificantB, xlab=paste("LFC", cols[2]))
+    AB_plot <- plotLFC_R2(dat = modelStats, x = cols[3], y = "R2", sigs = modelStats$isSignificantAB, xlab=paste("LFC", cols[3]))
     
     # Combine using patchwork
     combined_plot <- (A_plot | B_plot | AB_plot) +
@@ -347,16 +335,15 @@ server = function(input,output, session){
   
   
   getSignificantOutputTable <- reactive({ # add these stats to the full table?
-    sigReal <- sigReal()
-    boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
     df <- deconvolute()
+    boolfilt <- df$isSignificantA | df$isSignificantB | df$isSignificantAB
     df <- df[boolfilt,c(1,2,3,4,5,6,7,8,9)]
   })
   
   # Render Table of all Genes
   output$stats <- renderDT({
     df <- getSignificantOutputTable()
-    round(df, digits=4)
+    df <- round(df, digits=4)
     df$cluster <- generateClusters1()
     df[,c(1:4,6:10)]
   })
@@ -415,8 +402,7 @@ server = function(input,output, session){
         },
         error = function(e) {
           decoDF <- deconvolute()
-          sigReal <- sigReal()
-          boolfilt <- (sigReal[[1]] | sigReal[[2]] | sigReal[[3]])
+          boolfilt <- decoDF$isSignificantA | decoDF$isSignificantB | decoDF$isSignificantAB
           filteredDF <- round(decoDF[boolfilt,c(1,2,3,4,6,7,8,9)], digits=6)
           return(filteredDF)
           
