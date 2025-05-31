@@ -26,7 +26,9 @@ source("./gen_synthetic_data_helpers.R")
 
 #TODO: high priority
 # Add GSEA download results + speed up
+#   Add GSEA input data dataset? Just for verification purposes
 # Add Cluster assignment in download
+# FirstFilter? Optional? Give suggestion for LFC threshold?
 
 #TODO: normal priority
 # outputCSV werkend maken met en zonder FDR - nodig. (add FDR function to analyze model since its quick enough)
@@ -194,16 +196,14 @@ server = function(input,output, session){
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
 
     modelStats <- deconvoluteFunction(RandomDF, input$cntThres,
-                                      n_rep=input$reps, H0_threshold=1,
+                                      n_rep=input$reps, H0_threshold=1, # hardcoded here because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
                                       pseudo=input$pseudo, lowess=input$lowess,
-                                      beta_threshold=1,
-                                      r2_threshold=input$R2Thres) # why hardcoded 1 (=0) here?
-    # I guess because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
+                                      beta_threshold=1, # also set to LFC=0 because I want all genes in the FDR dataset in order to make a good distribution of the random genes.
+                                      r2_threshold=input$R2Thres) #
    
     FDRA <- modelStats[modelStats$isSignificantA==T,]
     FDRB <- modelStats[modelStats$isSignificantB==T,]
     FDRAB <- modelStats[modelStats$isSignificantAB==T,]
-    
     
     FDRa <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRA$A) > t)) # for each LFC check if above threshold 0-4
     FDRb <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRB$B) > t)) # will generate a for each threshold a percentage of genes above it
