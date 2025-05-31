@@ -1,10 +1,5 @@
 # figure generation for 2 replicates
 
-
-# For FDR/Sens LFC/Sens Classification Barplots
-# Create Random Dataset with Ground Truth 
-# analyse like normal
-
 # TODO: One fit function (reuse fit_model func?)
 # so you dont need to do all the normalisation and compute ratios steps manually
 
@@ -113,6 +108,7 @@ LinSigStats <- list()
 compute_lfc_thresholds(ground_truth_datasets[[2]],nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
+  # Use fit_intmodel() func??
   randomDataFrame <- ground_truth_datasets[[i]]
   GTnorm <- MedianNorm(randomDataFrame)
   GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = params$strucDF)
