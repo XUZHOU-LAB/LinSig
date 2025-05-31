@@ -91,6 +91,7 @@ ui = fluidPage(
                                       value = 20, min = 1, max = 1000, step = 1),
                          checkboxGroupInput("clusterChoice", "Choose Clusters for GSEA", choices = NA),
                          actionButton("actionButtonEnrich", "Start GSEA"),
+                         downloadButton("downloadEnrichResults", "Download Enrichment Results"),
                          plotOutput("enrichPlot")
                 ),
                 tabPanel("Advanced Parameters", # Maybe move some of them back to the main page?
@@ -446,13 +447,31 @@ server = function(input,output, session){
                            OrgDb = org.Mm.eg.db, 
                            ont = "BP")
       
+      enrichResult(ck)  # Store the result
+      
       return(dotplot(ck,
                      label_format = 125))
   })
+  enrichResult <- reactiveVal(NULL)
+  
   
   output$enrichPlot <- renderPlot({
     startGSEA()
   })
+  
+  output$downloadEnrichResults <- downloadHandler(
+    filename = function() {
+      paste0("GO_enrichment_results_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      res <- enrichResult()
+      if (is.null(res)) {
+        write.csv(data.frame(Message = "No enrichment results available."), file, row.names = FALSE)
+      } else {
+        write.csv(as.data.frame(res), file, row.names = FALSE)
+      }
+    }
+  )
   
   observeEvent(input$norm, {print("apply norm")})
   observeEvent(input$deconvolute, {print("Deconvolute")})
