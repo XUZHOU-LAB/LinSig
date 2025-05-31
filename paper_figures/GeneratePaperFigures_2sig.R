@@ -26,7 +26,7 @@ source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
 source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R")
 
 cts <- read.csv("~/Boston Internship/Github/Rsyn/paper_figures/IL6IL10combDF.csv", row.names=1)[,1:8]
-#cts <- read.csv("~/Boston Internship/Subdata_cts_q.csv", row.names=1)[,1:8]
+cts <- read.csv("~/Boston Internship/Subdata_cts_q.csv", row.names=1)[,1:8]
 dim(cts)
 #### Functions ####
 
@@ -107,7 +107,7 @@ sampledRows <- gt_df$ground_truth_data$sampled_rows
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation.
-compute_lfc_thresholds(ground_truth_datasets[[1]],nrep=2, size=100000, lowessn=0)
+compute_lfc_thresholds(ground_truth_datasets[[2]],nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
   randomDataFrame <- ground_truth_datasets[[i]]
@@ -296,7 +296,7 @@ allSensVarLFC <- combine_data("sen_lfc_df")
 ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   geom_point(aes(shape=term), size=2)+
   scale_shape_manual(values=c(21, 22, 24)) +
-  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.5,0.99))+
+  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.6,0.99))+
   xlab("Sensitivity") +
   stat_ellipse(geom="polygon", level=0.95, aes(fill=method), alpha=0.25)
 
@@ -367,7 +367,7 @@ sampledRows <- gt_df$ground_truth_data$sampled_rows
 fit_intmodel <- function(counts, meanThr=10, pseudo=1, lowess=FALSE, nrep=2,
                          FDR_pval=0.05, sizeRDF=60000, structureDataFrame){
   
-  normed <- MedianNorm(counts, countthres = meanThr, pseudo = pseudo)
+  normed <- MedianNorm(counts, count_threshold = meanThr, pseudo = pseudo)
   rats <- compute_ratios(normed, lowess_norm = F, structureDataFrame = structureDataFrame)
   fitstats <- ratios.fit(rats, CompThreshold = 1, n_rep=nrep) # compute model statistics
   

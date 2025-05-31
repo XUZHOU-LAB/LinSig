@@ -4,7 +4,6 @@ library(MASS)
 source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R") # for MedianNorm function
 source("~/Boston Internship/Github/Rsyn/paper_figures/gen_synthetic_data_helpers.R")
 source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R") # for RNAseqLowess function
-library(parallel)
 
 
 ### PARAMETERS ###
@@ -42,7 +41,7 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
   gtt <- generate_synthetic_data(source_df=source_df, size=size, nrep=2)
   
   #median normalization
-  normedR <- MedianNorm(gtt)
+  normedR <- MedianNorm(gtt, count_threshold = 10)
   
   #compute ratios
   #rats <- compute_ratiosR(normedR, nreps=nrep, lowess_norm=lowessn)
@@ -87,6 +86,11 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
   abline(h = 0.05, col = "red", lwd = 2, lty = 2)
   legend("topright", legend = c("A", "B", "AB"), col = c("blue", "orange", "green"), lwd = 2)
   
+  plot(stats[,3], stats$R2, pch='.', xlim=c(-4,4))
+  points(FDRAB[,3], FDRAB$R2, col='blue', pch='.', xlim=c(-4,4))
+  abline(v = 0.96, col = "red", lty = 2)
+  abline(v = -0.96, col = "red", lty = 2)
+  
   
   FDRDF <- data.frame(Xs = params$x_axis_thresholds, 
                       FDRa = FDRa, 
@@ -114,5 +118,6 @@ compute_lfc_thresholds <- function(source_df, size=20000, nrep=2, lowessn=0, onl
 
 
 #test function
-cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
-compute_lfc_thresholds(source_df = cts, size=40000, nrep=2)
+# cts <- read.csv("C:/Users/HB/OneDrive/Documents/Boston Internship/IL6IL10combDF.csv", row.names=1)[,1:8]
+# cts <- read.csv("~/Boston Internship/Subdata_cts_q.csv", row.names=1)[,1:8]
+# compute_lfc_thresholds(source_df = cts, size=100000, nrep=2)
