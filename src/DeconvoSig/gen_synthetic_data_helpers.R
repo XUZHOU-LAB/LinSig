@@ -118,9 +118,7 @@ compute_log_mu_cov <- function(df, nrep = 2) {
     cov = as.vector(sd_per_condition / mean_per_condition)
   )
   
-  print(dim(mucov))
-  plot(log2(mucov$mu), log2(mucov$cov), pch='.', xlim=c(0,12),ylim=c(-14,0))
-  
+
   # Log-transform mu and cov
   log_mucov <- log2(mucov)
   
