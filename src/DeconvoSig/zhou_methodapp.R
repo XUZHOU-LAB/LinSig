@@ -38,7 +38,7 @@ source("./gen_synthetic_data_helpers.R")
 # remove LOWESS option (or keep?)
 # MULTIPLE REPLICATES (difficult)
 # dotplot size aanpassen? - niet essentieel
-
+# Flow chart where genes are discarded and how many? first cnt>10, then lfc>1.5, then R2/pval, then FDR
 
 
 ###################################################
@@ -172,9 +172,9 @@ server = function(input,output, session){
   
 
   deconvolute <- eventReactive(input$deconvolute, {
-    sigGenes <- firstFilter() # implement maybe as optional since we also have the FDR filter?
+    sigGenesIDX <- firstFilter() # implement maybe as optional since we also have the FDR filter?
     # TODO: what to do with firstFilter? now its not being used...
-    deconvoluteFunction(inputfile(), input$cntThres,
+    deconvoluteFunction(inputfile()[sigGenesIDX,], input$cntThres,
                         n_rep=input$reps, input$H0Thres,
                         pseudo=input$pseudo, lowess=input$lowess,
                         beta_threshold=input$FCFDR, r2_threshold=input$R2Thres)
@@ -182,7 +182,7 @@ server = function(input,output, session){
   
   
   #returns LFC distribution of deconvoluted random genes
-  compFalseDisc <- eventReactive(input$compFDR, {
+  compFalseDisc <- reactive({
     #normalize countdata
     cntMat <- as.matrix(inputfile()[,1:8])
     
@@ -294,7 +294,7 @@ server = function(input,output, session){
          main="Distribution of False Discoveries over Fold Changes")
     lines(params$lfc_thresholds, FDRb, log='x', type='l', col='orange',lwd=1.5)
     lines(params$lfc_thresholds, FDRa, log='x', type='l', col='blue',lwd=1.5)
-    abline(h=0.05, col="red", lwd=2)
+    abline(h=0.05, col="red", lwd=2, lty=2)
     
   },width=400, height=400)
   
@@ -337,7 +337,7 @@ server = function(input,output, session){
   getSignificantOutputTable <- reactive({ # add these stats to the full table?
     df <- deconvolute()
     boolfilt <- df$isSignificantA | df$isSignificantB | df$isSignificantAB
-    df <- df[boolfilt,c(1,2,3,4,5,6,7,8,9)]
+    df <- df[boolfilt,c(1:9)]
   })
   
   # Render Table of all Genes
@@ -345,7 +345,7 @@ server = function(input,output, session){
     df <- getSignificantOutputTable()
     df <- round(df, digits=4)
     df$cluster <- generateClusters1()
-    df[,c(1:4,6:10)]
+    df[,c(2:4,6:10)] # 
   })
   
   
@@ -393,23 +393,27 @@ server = function(input,output, session){
   
   output$downloadData <- downloadHandler(
     filename = function() {
-      paste("datatable", ".csv", sep = "")
+      paste0("model_stats_", Sys.Date(), ".csv")
     },
     content = function(file) {
-      outcsv <- tryCatch( 
-        {
-          joinFDRandGenes()
-        },
-        error = function(e) {
-          decoDF <- deconvolute()
-          boolfilt <- decoDF$isSignificantA | decoDF$isSignificantB | decoDF$isSignificantAB
-          filteredDF <- round(decoDF[boolfilt,c(1,2,3,4,6,7,8,9)], digits=6)
-          return(filteredDF)
-          
+      tryCatch({
+        df <- joinFDRandGenes()
+        clusters <- generateClusters1()
+        
+        # Check row alignment
+        if (nrow(df) == length(clusters)) {
+          df$cluster <- clusters
+        } else {
+          warning("Row count mismatch between data and clusters")
+          df$cluster <- NA
         }
-      )
-      
-      write.csv(outcsv, file, row.names = T)
+        
+        write.csv(df, file, row.names = TRUE)
+      }, error = function(e) {
+        # Optional fallback if needed
+        message("Download error: ", e$message)
+        showNotification("Error while preparing download. Please check inputs.", type = "error")
+      })
     }
   )
   
