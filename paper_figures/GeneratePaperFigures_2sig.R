@@ -1,9 +1,7 @@
 # figure generation for 2 replicates
 
-
-# For FDR/Sens LFC/Sens Classification Barplots
-# Create Random Dataset with Ground Truth 
-# analyse like normal
+# TODO: One fit function (reuse fit_model func?)
+# so you dont need to do all the normalisation and compute ratios steps manually
 
 ########################################
 # G E N E R A T E   R A N D O M    D F #
@@ -26,8 +24,8 @@ source("~/Boston Internship/Github/Rsyn/paper_figures/compute_lfc_thresholds.R")
 source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/compute_ratios.R")
 
 cts <- read.csv("~/Boston Internship/Github/Rsyn/paper_figures/IL6IL10combDF.csv", row.names=1)[,1:8]
-
-
+cts <- read.csv("~/Boston Internship/Subdata_cts_q.csv", row.names=1)[,1:8]
+dim(cts)
 #### Functions ####
 
 generateGroundTruthGenes <- function(
@@ -73,6 +71,9 @@ params$strucDF <- data.frame(
 params$n_synth_dfs <- 10
 params$n_genes_simulated <- 40000
 params$lfc_reg_recovery_figure <- log2(2)
+params$lfc_fdr_sensitivity_per_lfc_figure <- log2(seq(1.5, 3.25, by = 0.125))
+params$x_axis_thresholds <- seq(0.001, 4.001, 0.001) # initialize an X-axis for the LFC threshold figure (LFC 0.001-4.001, with a small step size for high resolution curve)
+
 
 
 ###################################################################
@@ -82,7 +83,7 @@ datasets <- generate_multiple_datasets(source_df = cts, nrep = 2, size = params$
 gt_df <- generateGroundTruthGenes(n_ground_truth_genes = 6000,
                                  n_total_genes = 40000,
                                  range=1:40000,
-                                 fold_change = log2(seq(1.5, 3.25, by = 0.125)),
+                                 fold_change = params$lfc_fdr_sensitivity_per_lfc_figure,
                                  regulation = c(0, 0,  1,  1, 0, 0, 0, 0),
                                  randomize_pos_neg = T)
 
@@ -104,9 +105,10 @@ sampledRows <- gt_df$ground_truth_data$sampled_rows
 LinSigStats <- list()
 
 # compute recommended thresholds -> later replace with FDR<0.05 calculation.
-compute_lfc_thresholds(sig2rep2v1,nrep=2, size=100000, lowessn=0)
+compute_lfc_thresholds(ground_truth_datasets[[2]],nrep=2, size=100000, lowessn=0)
 
 for (i in 1:params$n_synth_dfs){
+  # Use fit_intmodel() func??
   randomDataFrame <- ground_truth_datasets[[i]]
   GTnorm <- MedianNorm(randomDataFrame)
   GTratios <- compute_ratios(GTnorm, lowess = 0, structureDataFrame = params$strucDF)
@@ -117,10 +119,10 @@ for (i in 1:params$n_synth_dfs){
   interaction_threshold <- lfc_thresholds["AB",]$Threshold_at_5pct
   main_threshold <- lfc_thresholds["B",]$Threshold_at_5pct
   
-  o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3) > interaction_threshold)#, na.rm=T)
-  o4s<- (GTstat[sampledRows,]$cov_x3<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X3)>interaction_threshold)#, na.rm=T)
-  o3 <- (GTstat$cov_x2<0.05 & GTstat$R2>0.8 & abs(GTstat$X2) >  main_threshold)#, na.rm=T)
-  o3s<- (GTstat[sampledRows,]$cov_x2<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X2)>main_threshold)#, na.rm=T)
+  o4 <- (GTstat$cov_x3<0.05 & GTstat$R2>0.8 & abs(GTstat$X3) > interaction_threshold)
+  o4s<- (GTstat[sampledRows,]$cov_x3<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X3)>interaction_threshold)
+  o3 <- (GTstat$cov_x2<0.05 & GTstat$R2>0.8 & abs(GTstat$X2) >  main_threshold)
+  o3s<- (GTstat[sampledRows,]$cov_x2<0.05 & GTstat[sampledRows,]$R2>0.8 & abs(GTstat[sampledRows,]$X2)>main_threshold)
 
   
   FDRv <- data.frame("FDR" = c((sum(o4, na.rm=T)-sum(o4s, na.rm=T))/sum(o4, na.rm=T),
@@ -142,15 +144,13 @@ for (i in 1:params$n_synth_dfs){
   sensLFCdf <- data.frame("rate"=SR,
                           "method"=rep("own", 60),
                           "term" = rep(c("int", "main"), each=30),
-                          "beta" = rep(logFoldChangesFactor2, 2),
+                          "beta" = rep(params$lfc_fdr_sensitivity_per_lfc_figure, 2),
                           "rep" = i)
   
   LinSigStats[[i]] <- list(fdr_df=FDRv, sen_df=SENv, sen_lfc_df=sensLFCdf)
 }
 
 ##### A N A L Y S E     L I M M A  #####
-library(limma)
-library(edgeR)
 cond <- c("ctrl", "LPS", "pH", "LPSpH")
 stim <- factor(c("ctrl", "ctrl", "LPS", "LPS", "ctrl", "ctrl", "LPS", "LPS"), levels=c("ctrl", "LPS"))
 pH <- factor(c("H","H","H", "H",  "L", "L", "L", "L"), levels=c("H", "L"))
@@ -198,7 +198,7 @@ for (i in 1:params$n_synth_dfs){
   sensLFCdf <- data.frame("rate"=SR,
                           "method"=rep("limma", 60),
                           "term" = rep(c("int", "main"), each=30),
-                          "beta" = rep(logFoldChangesFactor2, 2),
+                          "beta" = rep(params$lfc_fdr_sensitivity_per_lfc_figure, 2),
                           "rep" = i)
   limmaStats[[i]] <- list(fdr_df=FDRv, sen_df=SENv, sen_lfc_df=sensLFCdf)
 }
@@ -206,10 +206,9 @@ for (i in 1:params$n_synth_dfs){
 
 
 ##### A N A L Y S E    D E S E Q 2 #####
-library(DESeq2)
 metadata <- data.frame("condition"=c("Ctrl", "Ctrl", "Ctrl", "Ctrl", "Trt", "Trt", "Trt", "Trt"), 
                        "genotype"=c("WT", "WT", "MU", "MU", "WT","WT", "MU", "MU"))
-rownames(metadata) <- colnames(sig2rep2v0)
+#rownames(metadata) <- colnames(sig2rep2v0)
 
 deseq2Stats <- list()
 for (i in 1:params$n_synth_dfs){
@@ -221,16 +220,15 @@ for (i in 1:params$n_synth_dfs){
   resrAB = results(ddsr, name="genotypeMU.conditionTrt", independentFiltering = F)
   resrAB$pvalue[is.na(resrAB$pvalue)] <- 1
   resrAB$padj[is.na(resrAB$padj)] <- 1
-  sum(resrAB$pvalue<0.05, na.rm=T)
+
   resrB = results(ddsr, contrast=c("condition","Trt","Ctrl"), independentFiltering = F)
   resrB$pvalue[is.na(resrB$pvalue)] <- 1
   resrB$padj[is.na(resrB$padj)] <- 1
-  print(paste("B", sum(resrB$pvalue<0.05, na.rm=T)))
+  
   resrA = results(ddsr, contrast=c("genotype","MU","WT"), independentFiltering = F)
   resrA$pvalue[is.na(resrA$pvalue)] <- 1
   resrA$padj[is.na(resrA$padj)] <- 1
-  print(sum(resrA$pvalue<0.05, na.rm=T))
-  
+
   
   d4 <- (resrAB$padj<0.05)
   d4s<- (resrAB[sampledRows,]$padj<0.05)
@@ -256,7 +254,7 @@ for (i in 1:params$n_synth_dfs){
   sensLFCdf <- data.frame("rate"=SR,
                           "method"=rep("deseq2", 60),
                           "term" = rep(c("int", "main"), each=30),
-                          "beta" = rep(logFoldChangesFactor2, 2),
+                          "beta" = rep(params$lfc_fdr_sensitivity_per_lfc_figure, 2),
                           "rep" = i)
   
   deseq2Stats[[i]] <- list(fdr_df=FDRv, sen_df=SENv, sen_lfc_df=sensLFCdf) # TODO: named list to improve readability and repeatability
@@ -297,7 +295,7 @@ allSensVarLFC <- combine_data("sen_lfc_df")
 ggplot(data=allfdrsens, aes(x=Recall, y=1-FDR, fill=method)) +
   geom_point(aes(shape=term), size=2)+
   scale_shape_manual(values=c(21, 22, 24)) +
-  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.7,0.99))+
+  coord_cartesian(ylim=c(0.92,0.99), xlim=c(0.6,0.99))+
   xlab("Sensitivity") +
   stat_ellipse(geom="polygon", level=0.95, aes(fill=method), alpha=0.25)
 
@@ -365,10 +363,10 @@ sampledRows <- gt_df$ground_truth_data$sampled_rows
 
 
 ## TODO: refactor this function because it contains a lot of repetitive parts
-fit_intmodel <- function(counts, meanThr=10, pseudo=1, lowess=FALSE,
+fit_intmodel <- function(counts, meanThr=10, pseudo=1, lowess=FALSE, nrep=2,
                          FDR_pval=0.05, sizeRDF=60000, structureDataFrame){
   
-  normed <- MedianNorm(counts, countthres = meanThr, pseudo = pseudo)
+  normed <- MedianNorm(counts, count_threshold = meanThr, pseudo = pseudo)
   rats <- compute_ratios(normed, lowess_norm = F, structureDataFrame = structureDataFrame)
   fitstats <- ratios.fit(rats, CompThreshold = 1, n_rep=nrep) # compute model statistics
   
@@ -459,7 +457,7 @@ for (i in ground_truth_datasets){
   
   
   # only true discovery genes
-  otruereg1 <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
+  otruereg <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
                       onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3>0.00 & onlyRegulatedGenes$true_class=="B", na.rm=T), #
                 #just B rep(1:7, 750)==2
                 sum(onlyRegulatedGenes$FDRA>0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
@@ -482,7 +480,7 @@ for (i in ground_truth_datasets){
 
 
   #regrec
-  omistrue1 <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
+  omistrue <- c(sum(onlyRegulatedGenes$FDRA<0.05 & onlyRegulatedGenes$FDRB>0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
                       onlyRegulatedGenes$cov_x1<0.05 & onlyRegulatedGenes$cov_x2>0.00 & onlyRegulatedGenes$cov_x3>0.00 ,na.rm=T), #
                 #just B rep(1:7, 750)==2
                 sum(onlyRegulatedGenes$FDRA>0.05 & onlyRegulatedGenes$FDRB<0.05 & onlyRegulatedGenes$FDRAB>0.05 & onlyRegulatedGenes$R2>0.8 &
@@ -542,7 +540,7 @@ for (i in ground_truth_datasets){
   l2 <- (topTable(fit, number=Inf,coef=2, sort="none"))
   l2s<- (topTable(fit, number=Inf,coef=2)[sampledRows,])
   
-  litruereg1<- c(sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='A'),
+  litruereg<- c(sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='A'),
                 sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='B'),
                 sum(l2s$adj.P.Val<0.05 & l3s$adj.P.Val<0.05 & l4s$adj.P.Val>0.05 & onlyRegulatedGenes$true_class=='A+B'),
                 sum(l2s$adj.P.Val>0.05 & l3s$adj.P.Val>0.05 & l4s$adj.P.Val<0.05 & onlyRegulatedGenes$true_class=='A:B'),
@@ -593,7 +591,7 @@ for (i in ground_truth_datasets){
   resrA$padj[is.na(resrA$padj)] <- 1
   sum(resrA$pvalue<0.05, na.rm=T)
   
-  d2truereg1 <-c(sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='A'),
+  d2truereg <-c(sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='A'),
                 sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='B'),
                 sum(resrA[sampledRows,]$padj<0.05 & resrB[sampledRows,]$padj<0.05 & resrAB[sampledRows,]$padj>0.05 & onlyRegulatedGenes$true_class=='A+B'),
                 sum(resrA[sampledRows,]$padj>0.05 & resrB[sampledRows,]$padj>0.05 & resrAB[sampledRows,]$padj<0.05 & onlyRegulatedGenes$true_class=='A:B'),
@@ -623,7 +621,7 @@ for (i in ground_truth_datasets){
                           "RegLgc"=rep(factor(c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB"), level=c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB")),3),
                           "Method"= rep(c("own", "deseq2", "limma"),each=7))
   cTrueRegDF <- rbind(cTrueRegDF, TrueRegDF)
-  s
+
   MisTrueDF <- data.frame("Recall"=c(omistrue, d2mistrue, limistrue),
                           "RegLgc"=rep(factor(c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB"), level=c("A", "B", "A+B", "A:B", "A+AB", "B+AB", "A+B+AB")),3),
                           "Method"= rep(c("own", "deseq2", "limma"),each=7))

@@ -1,3 +1,7 @@
+params <- new.env(parent = emptyenv())
+params$lfc_thresholds <- seq(0,4,0.001)
+
+
 compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataFrame=NULL,
                            n_replicates=2){
   
@@ -70,11 +74,11 @@ compute_ratios <- function(df, pseudo_count=1, lowess_norm=FALSE, structureDataF
 
 
 # Function for normalization with LOWESS
-normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
+normalize <- function(inputdf, count_threshold, pseudo, replicates, lowess=FALSE){
   
   print("Applying Normalisation")
   cntMat <- as.matrix(inputdf[,1:8])
-  DataPseudo <- MedianNorm(cntMat, countThres=countThres, pseudo=pseudo)
+  DataPseudo <- MedianNorm(cntMat, count_threshold=count_threshold, pseudo=pseudo)
   
   Ratios <- compute_ratios(df=DataPseudo,
                            pseudo_count = pseudo,
@@ -85,21 +89,74 @@ normalize <- function(inputdf, countThres, pseudo, replicates, lowess=FALSE){
   
 }
 
-deconvoluteFunction <- function(ratiosDF, countDF, 
-                                n_rep, H0_threshold){
-  ratios <- ratiosDF
+deconvoluteFunction <- function(countDF, count_threshold,
+                                n_rep, H0_threshold,
+                                pseudo, lowess=F, 
+                                beta_threshold, r2_threshold){
   
-  n_samples = ncol(ratios)
+  ratios <- normalize(countDF, count_threshold = count_threshold,
+                      pseudo=pseudo, replicates=n_rep,
+                      lowess=lowess)
   
+  modelStats <- ratios.fit(ratios=ratios, 
+                          CompThreshold=H0_threshold,
+                          n_rep=n_rep)
   
-  strucvec <- rep(c(0,1,0, # creates a matrix for X in y ~ X. X is dependent on number of replicates
-                    0,1,1, # 5 rows in X for each replicate
-                    1,0,0,
-                    1,0,1,
-                    1,1,1), times = n_samples/5)
+  colnames(modelStats) <- get_colnames(countDF)
   
+  A <- (abs(modelStats[,2]) > log2(beta_threshold) &
+          modelStats$R2 > r2_threshold & modelStats[,6] < 0.05)
+  B <- (abs(modelStats[,3]) > log2(beta_threshold) &
+          modelStats$R2 > r2_threshold & modelStats[,7] < 0.05)
+  AB <- (abs(modelStats[,4]) > log2(beta_threshold) &
+           modelStats$R2 > r2_threshold & modelStats[,8]< 0.05)
   
-  X <- matrix(strucvec, ncol=3, byrow=T)
+  modelStats$isSignificantA <- A
+  modelStats$isSignificantB <- B
+  modelStats$isSignificantAB <- AB
+  
+  return(modelStats)
+}
+
+
+get_colnames <- function(df){
+  #get column data
+  cc <- strsplit(colnames(df)[1:8], "_") # change to 4*n_replicates
+  cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
+  column_names <- c("int", cols[2], cols[1], cols[3], "p_int",
+                            paste0("p_", cols[2]), paste0("p_", cols[1]), paste0("p_", cols[3]),
+                            "R2")
+  return(column_names)
+}
+
+
+NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
+  loc <- which.min(abs(x-abs(i)))
+  return(y[loc])
+}
+
+# Plotting function
+plotLFC_R2 <- function(dat, x, y, sigs, xlab) {
+  ggplot(dat, aes(x = .data[[x]], y = .data[[y]])) +
+    geom_point() +
+    geom_point(data = dat[sigs, ], color = "blue") +
+    coord_cartesian(xlim = c(-5, 5)) +
+    labs(x = xlab, y = y)
+}
+
+
+
+ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
+  
+  message("fitting model...")
+  # Generate structural vector and design matrix
+  n_samples <- n_rep*5 # TODO: n_samples defined twice?
+  strucvec <- rep(c(0,1,0, 
+                    0,1,1, 
+                    1,0,0, 
+                    1,0,1, 
+                    1,1,1), times = n_rep)
+  X <- matrix(strucvec, ncol = 3, byrow = TRUE)
   
   # Fit multivariate linear model
   multiplefit <- lm(t(ratios) ~ X)
@@ -128,36 +185,76 @@ deconvoluteFunction <- function(ratiosDF, countDF,
   coefficients <- t(multiplefit$coefficients)
   covB <- as.data.frame(covB)
   
-  
-  # Calculate P-values
   n_samples <- 4*n_rep
   n_var <- 3
   DoF <- n_samples - n_var - 1
-  ttest_stat <- (abs(coefficients) - log2(H0_threshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
+  ttest_stat <- (abs(coefficients) - log2(CompThreshold)) / sqrt(covB) #CompThreshold is H0 hypothesis
   ttest_stat <- data.frame(ttest_stat)
   
   Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
-  
-  
-  #get column data
-  cc <- strsplit(colnames(countDF)[1:8], "_") # change to 4*n_replicates
-  print(cc)
-  cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
-  print(cols)
-  
-  
-  
-  modelStats <- data.frame(cbind(coefficients, Pvalue, rsquared))
 
-  colnames(modelStats) <- c("int", cols[2], cols[1], cols[3], "p_int",
-                            paste0("cov_", cols[2]), paste0("cov_", cols[1]), paste0("cov_", cols[3]),
-                            "R2")
-  
-  return(round(modelStats,4))
+  outputdf <- data.frame(cbind(coefficients,Pvalue,rsquared))
+  colnames(outputdf)[9] <- "R2"
+  return(outputdf)
 }
 
 
-NearestNeighbours <- function(x,y,i){ #x:betas, y:FDR, i:numbertotest
-  loc <- which.min(abs(x-abs(i)))
-  return(y[loc])
+## Heatmap functions
+
+# Generate cluster labels (encoded integers)
+get_cluster_labels <- function(df) {
+  sts <- sign(df[, 2:4]) * (df[, 6:8] < 0.05)
+  sts[sts == -1] <- 2
+  rowSums(t(t(sts) * c(1, 3, 9)))  # 1:LPS, 3:pH, 9:pHLPS
 }
+
+# Get readable cluster codes
+get_cluster_code_mapping <- function(modelTerms) {
+  cluster_order <- c(1,2,3,6,21,22,19,15,17,11,9,12,10,13,18,
+                     24,20,26,4,5,7,8,14,23,16,25,0)
+  clusterCode <- c("T2+", "T2-", "T1+", "T1-", "T1+T3-", "T1+T2+T3-", "T2+T3-",
+                   "T1-T3+", "T1-T2-T3+", "T2-T3+", "T3+", "T1+T3+", "T2+T3+",
+                   "T1+T2+T3+", "T3-", "T1-T3-", "T2-T3-", "T1-T2-T3-", "T1+T2+",
+                   "T1+T2-", "T1-T2+", "T1-T2-", "T1+T2-T3+", "T1+T2-T3-",
+                   "T1-T2+T3+", "T1-T2+T3-", "no regulation")
+  clusterCode <- gsub("T1", modelTerms[2], clusterCode)
+  clusterCode <- gsub("T2", modelTerms[1], clusterCode)
+  clusterCode <- gsub("T3", modelTerms[3], clusterCode)
+  data.frame(clusterID = cluster_order, clusterCode = clusterCode)
+}
+
+assign_genes <- function(df, B_thr = 0.585, R_thr = 0.8) {
+  minimumGenesInClus <- 20
+
+  SIG_genes <- ((abs(df[,2]) > B_thr & df[,6] < 0.05) |
+                  (abs(df[,3]) > B_thr & df[,7] < 0.05) |
+                  (abs(df[,4]) > B_thr & df[,8] < 0.05)) & df$R2 > R_thr
+  
+  sigs <- df[SIG_genes, ]
+  
+  clus <- get_cluster_labels(sigs)
+  included <- names(which(table(clus) > minimumGenesInClus))
+  
+  hmdf <- sigs[clus %in% included, 2:4]
+  modelTerms <- colnames(df)[2:4]
+  clusterNames <- get_cluster_code_mapping(modelTerms)
+  
+  c_order <- clusterNames$clusterID
+  cc_order <- c_order[c_order %in% included]
+  
+  clus_split <- factor(clus[clus %in% included], levels = cc_order)
+  geneClusters <- clusterNames$clusterCode[match(clus_split, clusterNames$clusterID)]
+  geneClusters_ord <- factor(geneClusters, levels = clusterNames$clusterCode)
+  
+  col_fun <- colorRamp2(c(-2, 0, 2), c("blue", "white", "red"))
+  
+  Heatmap(as.matrix(hmdf), 
+          split = geneClusters_ord, 
+          col = col_fun,
+          cluster_row_slices = FALSE,
+          cluster_columns = FALSE,
+          show_row_dend = FALSE,
+          heatmap_legend_param = list(title = "LFC"))
+}
+
+

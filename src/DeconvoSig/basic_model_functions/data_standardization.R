@@ -19,7 +19,7 @@
 #' @param x should be a numeric vector
 
 geomean <- function(x){
-  exp(mean(log(x)))
+  2 ^ mean(log2(x))
 }
 
 #' Median Normalization of the data
@@ -27,11 +27,11 @@ geomean <- function(x){
 #'  `MedianNorm` normalizes data with the median normalization method
 #'
 #' @param data Use a count matrix K_ij, with one row for each gene i and one column for each sample j. Matrix entries indicate the number of sequencing reads mapped to a gene in a sample.
-#' @param countthres Count threshold for the count data. Default is 10
+#' @param count_threshold Count threshold for the count data. Default is 10
 #' @param pseudo Pseudo count added to deal with zero count problem. Default is 1
 
-MedianNorm <- function(data, countThres=10, pseudo=1){
-  Subdata = data[rowMeans(data)>=countThres,]     # Subset rows with average count higher than 10
+MedianNorm <- function(data, count_threshold=10, pseudo=1){
+  Subdata = data[rowMeans(data)>=count_threshold,]     # Subset rows with average count higher than 10
   Subdata = Subdata + pseudo                       # Add Pseudo count of 1
 
   t = apply(Subdata,1, geomean)         # Calculate Geometric mean

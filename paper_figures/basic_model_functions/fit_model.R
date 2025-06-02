@@ -10,11 +10,7 @@ ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
   message("fitting model...")
   # Generate structural vector and design matrix
   n_samples <- ncol(ratios) # TODO: n_samples defined twice?
-  strucvec <- rep(c(0,1,0, 
-                    0,1,1, 
-                    1,0,0, 
-                    1,0,1, 
-                    1,1,1), times = n_samples/5)
+  strucvec <- rep(c(0,1,0, 0,1,1, 1,0,0, 1,0,1, 1,1,1), times = n_samples/5)
   X <- matrix(strucvec, ncol = 3, byrow = TRUE)
   
   # Fit multivariate linear model
@@ -53,13 +49,13 @@ ratios.fit <- function(ratios, CompThreshold=1.5, n_rep=2){
   Pvalue = 1 - apply(ttest_stat, 2, pt, df=DoF)
   
   
-  # Datafit = coefficients %*% t(cbind(rep(1, 5*n_rep), X)) #matrix multiplication to fit model
-  # Residual = ratios - Datafit
-  # Expression_variation = rowMeans(ratios^2)
-  # Expression_residual = rowMeans(Residual^2)
-  # Varexplain = 100*(Expression_variation - Expression_residual) / Expression_variation
-  # 
-  # Fit <- data.frame(Expression_variation, Varexplain)
+  Datafit = coefficients %*% t(cbind(rep(1, 5*n_rep), X)) #matrix multiplication to fit model
+  Residual = ratios - Datafit
+  Expression_variation = rowMeans(ratios^2)
+  Expression_residual = rowMeans(Residual^2)
+  Varexplain = 100*(Expression_variation - Expression_residual) / Expression_variation
+  
+  Fit <- data.frame(Expression_variation, Varexplain)
 
   
   outputdf <- data.frame(cbind(coefficients,Pvalue,rsquared))
