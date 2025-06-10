@@ -174,8 +174,8 @@ server = function(input,output, session){
   deconvolute <- eventReactive(input$deconvolute, {
     sigGenesIDX <- firstFilter() # implement maybe as optional since we also have the FDR filter?
     # TODO: what to do with firstFilter? now its not being used...
-    deconvoluteFunction(inputfile()[sigGenesIDX,], input$cntThres,
-                        n_rep=input$reps, input$H0Thres,
+    deconvoluteFunction(inputfile()[sigGenesIDX,], count_threshold=input$cntThres,
+                        n_rep=input$reps, H0_threshold=input$H0Thres,
                         pseudo=input$pseudo, lowess=input$lowess,
                         beta_threshold=input$FCFDR, r2_threshold=input$R2Thres)
   })
