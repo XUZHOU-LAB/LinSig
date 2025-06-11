@@ -1,7 +1,6 @@
 library(dplyr)
 library(MASS)
-source("~/Boston Internship/Github/Rsyn/paper_figures/basic_model_functions/data_standardization.R")
-
+source("~/Boston Internship/Github/Rsyn/src/DeconvoSig/basic_model_functions/data_standardization.R")
 
 # Generate multiple synthetic datasets
 generate_multiple_datasets <- function(source_df, nrep = 2, size, n_datasets = 10) {

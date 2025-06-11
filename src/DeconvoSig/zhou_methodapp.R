@@ -55,8 +55,6 @@ ui = fluidPage(
                  value = 2, min = 2, step = 1),
     checkboxInput("lowess", "LOWESS Norm", value = FALSE), # Kept here as per general controls
     hr(),
-    sliderInput("lfcThres", "LogFoldChange Threshold",
-                value = 0.585, min = 0, max = 3, step = 0.001),
     actionButton("deconvolute", "Deconvolute Signals"),
     hr(),
     actionButton("compFDR", "Compute False Discovery Rate"),
@@ -174,10 +172,11 @@ server = function(input,output, session){
   deconvolute <- eventReactive(input$deconvolute, {
     sigGenesIDX <- firstFilter() # implement maybe as optional since we also have the FDR filter?
     # TODO: what to do with firstFilter? now its not being used...
-    deconvoluteFunction(inputfile()[sigGenesIDX,], input$cntThres,
-                        n_rep=input$reps, input$H0Thres,
+    deconvoluteFunction(inputfile(), count_threshold=input$cntThres,
+                        n_rep=input$reps, H0_threshold=input$H0Thres,
                         pseudo=input$pseudo, lowess=input$lowess,
-                        beta_threshold=input$FCFDR, r2_threshold=input$R2Thres)
+                        beta_threshold=input$FCFDR, r2_threshold=input$R2Thres,
+                        sig_index=sigGenesIDX)
   })
   
   
