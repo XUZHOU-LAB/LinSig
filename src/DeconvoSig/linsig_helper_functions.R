@@ -97,13 +97,23 @@ deconvoluteFunction <- function(countDF, count_threshold,
                                 pseudo, lowess=F, 
                                 beta_threshold, r2_threshold, sig_index=FALSE){
   
+  
+  print("deconvolute function before normalization")
+  print(countDF['Slco5a1',])
+  
   ratios <- normalize(countDF, count_threshold = count_threshold,
                       pseudo=pseudo, replicates=n_rep,
                       lowess=lowess, sig_index=sig_index)
   
+  print("deconvolute function after normalization")
+  print(ratios['Slco5a1',])
+  
   modelStats <- ratios.fit(ratios=ratios, 
                           CompThreshold=H0_threshold,
                           n_rep=n_rep)
+  
+  print('modelStats after fit')
+  print(modelStats['Slco5a1',])
   
   colnames(modelStats) <- get_colnames(countDF)
   
