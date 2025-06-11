@@ -55,8 +55,6 @@ ui = fluidPage(
                  value = 2, min = 2, step = 1),
     checkboxInput("lowess", "LOWESS Norm", value = FALSE), # Kept here as per general controls
     hr(),
-    sliderInput("lfcThres", "LogFoldChange Threshold",
-                value = 0.585, min = 0, max = 3, step = 0.001),
     actionButton("deconvolute", "Deconvolute Signals"),
     hr(),
     actionButton("compFDR", "Compute False Discovery Rate"),
