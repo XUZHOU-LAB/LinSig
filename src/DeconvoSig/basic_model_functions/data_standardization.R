@@ -44,7 +44,7 @@ MedianNorm <- function(data, count_threshold=10, pseudo=1){
   
   C <- t(t(Subdata) / T_med)
   
-  print(head(C))
+  
   return(C)
 }
 

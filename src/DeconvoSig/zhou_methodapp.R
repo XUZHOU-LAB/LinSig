@@ -165,10 +165,6 @@ server = function(input,output, session){
     # grab all genes that have a higher foldchange than lfcThres and have a significant q-value for at least one of the conditions.
     SignificantGenesIDX = rowSums(abs(Fold[,1:4]) >= input$lfcThres & qvalDF <= 0.05)>0
     
-    print("first filter function prints")
-    print(inputdf['Slco5a1',])
-    print(DataPseudo['Slco5a1',])
-    
     return(SignificantGenesIDX)
   })
   
