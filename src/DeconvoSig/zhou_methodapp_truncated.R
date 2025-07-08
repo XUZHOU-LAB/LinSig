@@ -16,7 +16,7 @@ library(patchwork)
 # GSEA libraries
 library(AnnotationDbi)
 library("org.Mm.eg.db")
-library(clusterProfiler)
+#library(clusterProfiler)
 library(markdown)
 
 
@@ -73,7 +73,7 @@ ui = fluidPage(
                          fluidRow(
                            splitLayout(cellWidths = c("50%", "50%"), 
                                        plotOutput("betaR2_FDR"), 
-                                       plotOutput("FDistribution"))
+                                       plotOutput("FDRdistribution"))
                          ),
                          verbatimTextOutput("cFDR"),
                          verbatimTextOutput("pval")),
@@ -86,14 +86,7 @@ ui = fluidPage(
                 tabPanel("Heatmap",
                          actionButton("show_heatmap", "Generate Heatmap"),
                          htmlOutput("heatmap_output")),
-                tabPanel("Enrichment Analysis",
-                         numericInput("minimumGenesinClus", "Minimum Genes in a Cluster for GSEA",
-                                      value = 20, min = 1, max = 1000, step = 1),
-                         checkboxGroupInput("clusterChoice", "Choose Clusters for GSEA", choices = NA),
-                         actionButton("actionButtonEnrich", "Start GSEA"),
-                         downloadButton("downloadEnrichResults", "Download Enrichment Results"),
-                         plotOutput("enrichPlot")
-                ),
+        
                 tabPanel("Advanced Parameters", # Maybe move some of them back to the main page?
                          numericInput("pseudo", "Add Pseudo Count",
                                       value = 1,
@@ -168,7 +161,7 @@ server = function(input,output, session){
     return(SignificantGenesIDX)
   })
   
-
+  
   deconvolute <- eventReactive(input$deconvolute, {
     sigGenesIDX <- firstFilter() # implement maybe as optional since we also have the FDR filter?
     # TODO: what to do with firstFilter? now its not being used...
@@ -176,7 +169,7 @@ server = function(input,output, session){
                         n_rep=input$reps, H0_threshold=input$H0Thres,
                         pseudo=input$pseudo, lowess=input$lowess,
                         beta_threshold=input$FCFDR, r2_threshold=input$R2Thres,
-                        sig_index=FALSE)
+                        sig_index=sigGenesIDX)
   })
   
   
@@ -193,16 +186,16 @@ server = function(input,output, session){
     RandomDF <- t(apply(sampledMuCoV, 1, FUN=drawreps, nrep=input$reps))
     
     colnames(RandomDF) <- c("c_A","c_B", "A_A","A_B", "B_A", "B_B", "AB_A", "AB_B")
-
+    
     modelStats <- deconvoluteFunction(RandomDF, input$cntThres,
                                       n_rep=input$reps, H0_threshold=1, # hardcoded here because we want to test for any False Discovered genes (so LFC>0) and not just False Discoveries that are above e.g. FC 1.5
                                       pseudo=input$pseudo, lowess=input$lowess,
-                                      beta_threshold=0, # also set to LFC=0 because I want all genes in the FDR dataset in order to make a good distribution of the random genes.
-                                      r2_threshold=0)#input$R2Thres) #
-   
-    FDRA <- modelStats#[modelStats$isSignificantA==T,]
-    FDRB <- modelStats#[modelStats$isSignificantB==T,]
-    FDRAB <- modelStats#[modelStats$isSignificantAB==T,]
+                                      beta_threshold=1, # also set to LFC=0 because I want all genes in the FDR dataset in order to make a good distribution of the random genes.
+                                      r2_threshold=input$R2Thres) #
+    
+    FDRA <- modelStats[modelStats$isSignificantA==T,]
+    FDRB <- modelStats[modelStats$isSignificantB==T,]
+    FDRAB <- modelStats[modelStats$isSignificantAB==T,]
     
     FDRa <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRA$A) > t)) # for each LFC check if above threshold 0-4
     FDRb <- sapply(params$lfc_thresholds, function(t) mean(abs(FDRB$B) > t)) # will generate a for each threshold a percentage of genes above it
@@ -243,7 +236,7 @@ server = function(input,output, session){
   # VENN DIAGRAM
   output$venn <- renderPlot({
     df <- deconvolute()
-
+    
     M <-tibble('A' = df$isSignificantA,
                'B' = df$isSignificantB,
                'AB'= df$isSignificantAB)
@@ -297,16 +290,16 @@ server = function(input,output, session){
     
   },width=400, height=400)
   
-
+  
   # Volcano Plots
   output$volcanoPlot <- renderPlot({
     modelStats <- deconvolute()
     ptype <- as.character(input$plottype)
-
+    
     ggplot()+
       geom_point(aes(x=modelStats[,(as.integer(ptype)+1)], # lfc values
                      y=modelStats[,(as.integer(ptype)+1+4)] # pvalues
-                     ))+
+      ))+
       scale_y_continuous(trans="log10")+
       xlab(colnames(modelStats[as.integer(ptype)+1])) + ylab("log P-value")+ # do something
       ggtitle(paste0("Volcano Plot of ", colnames(modelStats[as.integer(ptype)+1])), " Induced Genes")+
@@ -319,10 +312,10 @@ server = function(input,output, session){
     modelStats <- deconvolute()
     ptype <- as.character(input$plottype)
     df <- data.frame(cbind(modelStats[,2:4], modelStats[,6:8]))
-
+    
     ggdf <- data.frame(x=modelStats[,(as.integer(ptype)+1)],   # columns 2,3,4 for LFC
                        y=modelStats[,(as.integer(ptype)+1+4)] # columns 6,7,8 for P-values
-                       ) 
+    ) 
     ggdf <- cbind(ggdf, df)
     brushedPoints(ggdf, input$plot_brush, xvar = "x", yvar = "y")
   })
@@ -359,7 +352,7 @@ server = function(input,output, session){
   generateClusters <- reactive({
     sigs <- getSignificantOutputTable()
     minGenes <- input$minimumGenesinClus
-
+    
     clus <- get_cluster_labels(sigs)
     
     included <- names(which(table(clus) > minGenes))
@@ -375,7 +368,7 @@ server = function(input,output, session){
   
   generateClusters1 <- reactive({
     df <- getSignificantOutputTable()
-
+    
     clus <- get_cluster_labels(df)
     
     modelTerms <- colnames(df)[2:4]
@@ -416,80 +409,39 @@ server = function(input,output, session){
     }
   )
   
-  startGSEA <- eventReactive(input$actionButtonEnrich, {
-      clusterDT <- generateClusters()
-      clusterDT <- clusterDT[clusterDT$cluster %in% input$clusterChoice,]
-      
-      clusterDT$entrez <- mapIds(org.Mm.eg.db, keys = rownames(clusterDT),
-                                 column = "ENTREZID", keytype = "SYMBOL")
-      clusterDT <- na.omit(clusterDT)
 
-      clusterList <- list()
-      for (cluster in unique(clusterDT$cluster)){
-        entrezInCluster <- clusterDT[clusterDT$cluster==cluster,]$entrez
-        cluster <- as.character(cluster)
-        clusterList[[cluster]] <- entrezInCluster
-      }
 
-      ck <- compareCluster(geneCluster = clusterList, # this function is slow (100s)
-                           fun = enrichGO, 
-                           OrgDb = org.Mm.eg.db, 
-                           ont = "BP")
-      
-      enrichResult(ck)  # Store the result
-      
-      return(dotplot(ck,
-                     label_format = 125))
-  })
-  enrichResult <- reactiveVal(NULL)
-  
-  
-  output$enrichPlot <- renderPlot({
-    startGSEA()
-  })
-  
-  output$downloadEnrichResults <- downloadHandler(
-    filename = function() {
-      paste0("GO_enrichment_results_", Sys.Date(), ".csv")
-    },
-    content = function(file) {
-      res <- enrichResult()
-      if (is.null(res)) {
-        write.csv(data.frame(Message = "No enrichment results available."), file, row.names = FALSE)
-      } else {
-        write.csv(as.data.frame(res), file, row.names = FALSE)
-      }
-    }
-  )
-  
-  observeEvent(input$norm, {print("apply norm")})
-  observeEvent(input$deconvolute, {print("Deconvolute")})
-  observe(firstFilter())
-  observeEvent(input$H0Thres, {print(input$H0Thres)})
-  observeEvent(input$R2Thres, {print(input$R2Thres)})
-  observeEvent(input$plottype, {print(input$plottype)})
-  observeEvent(input$compFDR, {print("Compute FDR")})
-  
-  observeEvent(input$show_heatmap, {
-    ht1 <- HDF()
-    InteractiveComplexHeatmapWidget(input,output, session, ht1,
-                                    output_id = "heatmap_output")
-  })
 
-  
-  output$downloadExample <- downloadHandler(
-    filename = function() {
-      paste("IL6IL10_reduced_dataset", ".csv", sep = "")
-    },
-    content = function(file) {
 
-      exampleData <- read.csv("./IL6IL10_reduced_df.csv",
-                              header = T,
-                              row.names = 1)
-      
-      write.csv(exampleData, file, row.names = T)
-    }
-  )
+
+observeEvent(input$norm, {print("apply norm")})
+observeEvent(input$deconvolute, {print("Deconvolute")})
+observe(firstFilter())
+observeEvent(input$H0Thres, {print(input$H0Thres)})
+observeEvent(input$R2Thres, {print(input$R2Thres)})
+observeEvent(input$plottype, {print(input$plottype)})
+observeEvent(input$compFDR, {print("Compute FDR")})
+
+observeEvent(input$show_heatmap, {
+  ht1 <- HDF()
+  InteractiveComplexHeatmapWidget(input,output, session, ht1,
+                                  output_id = "heatmap_output")
+})
+
+
+output$downloadExample <- downloadHandler(
+  filename = function() {
+    paste("IL6IL10_reduced_dataset", ".csv", sep = "")
+  },
+  content = function(file) {
+    
+    exampleData <- read.csv("./IL6IL10_reduced_df.csv",
+                            header = T,
+                            row.names = 1)
+    
+    write.csv(exampleData, file, row.names = T)
+  }
+)
 
 }
 

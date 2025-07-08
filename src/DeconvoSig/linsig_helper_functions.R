@@ -126,8 +126,8 @@ get_colnames <- function(df){
   #get column data
   cc <- strsplit(colnames(df)[1:8], "_") # change to 4*n_replicates
   cols <- unique(unlist(cc)[2*(1:length(cc))-1])[-1] # change 2 -> n_replicates
-  column_names <- c("int", cols[2], cols[1], cols[3], "p_int",
-                            paste0("p_", cols[2]), paste0("p_", cols[1]), paste0("p_", cols[3]),
+  column_names <- c("int", cols[1], cols[2], cols[3], "p_int",
+                            paste0("p_", cols[1]), paste0("p_", cols[2]), paste0("p_", cols[3]),
                             "R2")
   return(column_names)
 }
