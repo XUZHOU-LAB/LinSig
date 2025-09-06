@@ -1,6 +1,6 @@
 library(dplyr)
 library(MASS)
-source("~/Boston Internship/Github/Rsyn/src/DeconvoSig/basic_model_functions/data_standardization.R")
+source("~/bloop/LinSig/src/DeconvoSig/basic_model_functions/data_standardization.R")
 
 # Generate multiple synthetic datasets
 generate_multiple_datasets <- function(source_df, nrep = 2, size, n_datasets = 10) {
@@ -35,6 +35,7 @@ generate_mucov_df <- function(source_df, size, nrep=2,
   
   lmucov <- compute_log_mu_cov(normed, nrep=nrep)
   
+
   # Estimate 2D kernel density
   kde <- kde2d(lmucov$mu, lmucov$cov, n = 100)
   
@@ -126,14 +127,16 @@ compute_log_mu_cov <- function(df, nrep = 2) {
 
 
 drawreps <- function(mu_cov_vec, nrep = 2) {
-  mu <- mu_cov_vec["mu"]
-  cov <- mu_cov_vec["cov"]
-  
+  mu <- 2^mu_cov_vec["mu"]
+  cov <- 2^mu_cov_vec["cov"]#*0.5
+
   random_counts <- rnorm(
     n = 4 * nrep,
-    mean = exp(mu),
-    sd = exp(mu + cov)
+    mean = mu,#exp(mu)
+    sd = mu * cov #exp(mu + cov)
   )
+  random_counts <- random_counts * rlnorm(1, meanlog = 0, sdlog = 0)#sdlog = 0.10
+  
   random_counts[random_counts < 0] <- 1
   return(random_counts)
 }
